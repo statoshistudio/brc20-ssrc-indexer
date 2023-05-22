@@ -1,6 +1,8 @@
 package utils
 
-import "html/template"
+import (
+	"html/template"
+)
 
 const (
 	VALID_HANDSHAKE_SECONDS = 15 // time interval within which to accept a handshake
@@ -62,6 +64,31 @@ const (
 	Broadcast SubAction = "broadcast"
 	Join      SubAction = "join"
 	Leave     SubAction = "leave"
+)
+
+type ErrorCode struct {
+	Code    int
+	Message string
+}
+
+var (
+	EC4005 ErrorCode = ErrorCode{
+		Code:    4005,
+		Message: "Mint amount exceeds lim",
+	}
+	EC4004 ErrorCode = ErrorCode{
+		Code:    4004,
+		Message: "Token not yet deployed",
+	}
+	EC3001 ErrorCode = ErrorCode{
+		Code:    3001,
+		Message: "Token already minted",
+	}
+
+	EC4001 ErrorCode = ErrorCode{
+		Code:    4001,
+		Message: "Insufficient Available Balance",
+	}
 )
 
 var HomeTemplate = template.Must(template.New("").Parse(`

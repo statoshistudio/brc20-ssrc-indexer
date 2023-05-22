@@ -41,6 +41,7 @@ type Configuration struct {
 	Validator                bool           `mapstructure:"validator"`
 	BootstrapNode            bool           `mapstructure:"bootstrap_node"`
 	DataDir                  string         `mapstructure:"data_dir"`
+	OrdinalApi               string         `mapstructure:"ordinal_api"`
 }
 
 var (
