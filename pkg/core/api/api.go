@@ -227,8 +227,10 @@ func getUnitGenericInscription(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(message)
 		return
 	}
+	fmt.Println("--------")
+	fmt.Println(result.InscriptionBody)
 
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(indexer.GetOrdStructure(result))
 
 }
 

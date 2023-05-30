@@ -46,16 +46,17 @@ type GenericInscriptionModel struct {
 	InscriptionId            string `gorm:"unique"`
 	Address                  string `gorm:"address"`
 	GenesisAddress           string `gorm:"genesis_address"`
-	GenesisFee               int    `gorm:"genesis_fee"`
-	GenesisHeight            int    `gorm:"genesis_height"`
+	GenesisFee               int64  `gorm:"genesis_fee"`
+	GenesisHeight            int64  `gorm:"genesis_height"`
 	InscriptionBody          []byte `gorm:"inscription_body"`
-	InscriptionContentLength int    `gorm:"inscription_content_length"`
+	InscriptionContentLength int64  `gorm:"inscription_content_length"`
 	InscriptionContentType   string `gorm:"inscription_content_type"`
 	Next                     string `json:"next"`
 	Previous                 string `json:"previous"`
-	Number                   int    `json:"number"`
+	Number                   int64  `json:"number"`
 	ScriptPubkey             string `json:"script_pubkey"`
-	Value                    int    `json:"value"`
+	Value                    int64  `json:"value"`
+	OutputAddress            string `json:"output_address"`
 	Sat                      string `json:"sat"`
 	Satpoint                 string `json:"satpoint"`
 	Timestamp                string `json:"timestamp"`

@@ -52,6 +52,33 @@ type PaginationResponse struct {
 	Prev    *int64 `json:"prev"`
 }
 
+func GetOrdStructure(genIModel *sql.GenericInscriptionModel) InscriptionResponse {
+	data := InscriptionResponse{
+		Address:        genIModel.Address,
+		GenesisAddress: genIModel.GenesisAddress,
+		GenesisFee:     &genIModel.GenesisFee,
+		GenesisHeight:  &genIModel.GenesisHeight,
+		InscriptionId:  genIModel.InscriptionId,
+		Next:           &genIModel.Next,
+		Number:         &genIModel.Number,
+		Previous:       genIModel.Previous,
+		Sat:            genIModel.Sat,
+		Satpoint:       genIModel.Satpoint,
+		Timestamp:      genIModel.Timestamp,
+		InscriptionOutput: InscriptionOutput{
+			ScriptPubkey: genIModel.ScriptPubkey,
+			Value:        genIModel.Value,
+			Address:      genIModel.OutputAddress,
+		},
+		Inscription: Inscription{
+			ContentLength: &genIModel.InscriptionContentLength,
+			ContentType:   genIModel.InscriptionContentType,
+			Body:          genIModel.InscriptionBody,
+		},
+	}
+	return data
+}
+
 type InscriptionResponse struct {
 	Address           string            `json:"address"`
 	GenesisAddress    string            `json:"genesis_address"`
@@ -230,16 +257,17 @@ func SaveGenericInscription(db *gorm.DB, inscriptionResponse *InscriptionRespons
 		InscriptionId:            inscriptionResponse.InscriptionId,
 		Address:                  inscriptionResponse.Address,
 		GenesisAddress:           inscriptionResponse.GenesisAddress,
-		GenesisFee:               int(*inscriptionResponse.GenesisFee),
-		GenesisHeight:            int(*inscriptionResponse.GenesisHeight),
+		GenesisFee:               int64(*inscriptionResponse.GenesisFee),
+		GenesisHeight:            int64(*inscriptionResponse.GenesisHeight),
 		InscriptionBody:          inscriptionResponse.Inscription.Body,
-		InscriptionContentLength: int(*inscriptionResponse.Inscription.ContentLength),
+		InscriptionContentLength: int64(*inscriptionResponse.Inscription.ContentLength),
 		InscriptionContentType:   inscriptionResponse.Inscription.ContentType,
 		Next:                     next,
 		Previous:                 inscriptionResponse.Previous,
-		Number:                   int(*inscriptionResponse.Number),
+		Number:                   int64(*inscriptionResponse.Number),
 		ScriptPubkey:             inscriptionResponse.InscriptionOutput.ScriptPubkey,
-		Value:                    int(inscriptionResponse.InscriptionOutput.Value),
+		Value:                    int64(inscriptionResponse.InscriptionOutput.Value),
+		OutputAddress:            inscriptionResponse.InscriptionOutput.Address,
 		Sat:                      inscriptionResponse.Sat,
 		Satpoint:                 inscriptionResponse.Satpoint,
 		Timestamp:                inscriptionResponse.Timestamp,
@@ -459,16 +487,17 @@ func HandleCallback(db *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.
 	err = db.Model(&data).Updates(sql.GenericInscriptionModel{
 		Address:                  inscriptionResponse.Address,
 		GenesisAddress:           inscriptionResponse.GenesisAddress,
-		GenesisFee:               int(*inscriptionResponse.GenesisFee),
-		GenesisHeight:            int(*inscriptionResponse.GenesisHeight),
+		GenesisFee:               int64(*inscriptionResponse.GenesisFee),
+		GenesisHeight:            int64(*inscriptionResponse.GenesisHeight),
 		InscriptionBody:          inscriptionResponse.Inscription.Body,
-		InscriptionContentLength: int(*inscriptionResponse.Inscription.ContentLength),
+		InscriptionContentLength: int64(*inscriptionResponse.Inscription.ContentLength),
 		InscriptionContentType:   inscriptionResponse.Inscription.ContentType,
 		Next:                     next,
 		Previous:                 inscriptionResponse.Previous,
-		Number:                   int(*inscriptionResponse.Number),
+		Number:                   int64(*inscriptionResponse.Number),
 		ScriptPubkey:             inscriptionResponse.InscriptionOutput.ScriptPubkey,
-		Value:                    int(inscriptionResponse.InscriptionOutput.Value),
+		Value:                    int64(inscriptionResponse.InscriptionOutput.Value),
+		OutputAddress:            inscriptionResponse.InscriptionOutput.Address,
 		Sat:                      inscriptionResponse.Sat,
 		Satpoint:                 inscriptionResponse.Satpoint,
 		Timestamp:                inscriptionResponse.Timestamp,
