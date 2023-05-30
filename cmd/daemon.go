@@ -287,6 +287,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 							fmt.Println(err)
 							return
 						}
+						if err := indexer.SaveGenericInscription(sql.SqlDB, inscription); err != nil {
+							// return any error will rollback
+							if err != nil {
+								logger.Infof("Errr %s", err)
+							}
+							return
+						}
 						acceptedTypes := [2]string{
 							"text/plain;charset=utf-8",
 							"application/json"}
@@ -304,6 +311,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 						if err != nil {
 							logger.Infof("Errr %s", err)
 						}
+
 						if staticInscriptionStructure.P == "brc-20" {
 							content := inscription.Inscription.GetContent()
 							sql.SqlDB.Transaction(func(tx *gorm.DB) error {
@@ -348,7 +356,8 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 				case pendingTransferInscription := <-pendingTransferInscriptionCh:
 					func() {
 						utils.Logger.Infof("@@@@pendingTransferInscription err = %s  ", pendingTransferInscription.InscriptionId)
-						inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, pendingTransferInscription.InscriptionId)
+						inscription, err := sql.GetUnitGenericInscription(sql.SqlDB, pendingTransferInscription.InscriptionId)
+						// sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
 						if err != nil {
 							fmt.Println("--------")
 							fmt.Println(err)
@@ -381,7 +390,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 						}
 
-						content := inscription.Inscription.GetContent()
+						// content := inscription.Inscription.GetContent()
+						var content indexer.InscriptionStructure
+						err = json.Unmarshal([]byte(inscription.InscriptionBody), &content)
+						if err != nil {
+							log.Println("Errr err:", err)
+							return
+						}
 						if err := indexer.CreditPendingOperation(sql.SqlDB, &content, *inscription, previousOwner); err != nil {
 							// return any error will rollback
 							logger.Infof("@@@ @@@@@@NOT Thesame AFTER Errrr %s", err)

@@ -23,6 +23,7 @@ func InitializeDb(file string, migrations []string) (*gorm.DB, error) {
 		return nil, err
 	}
 	db.AutoMigrate(&InscriptionModel{})
+	db.AutoMigrate(&GenericInscriptionModel{})
 	db.AutoMigrate(&Brc20TokenModel{})
 	db.AutoMigrate(&AccountModel{})
 	db.AutoMigrate(&Brc20TokenAccountBalanceModel{})

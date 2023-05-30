@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	// "github.com/ByteGum/go-ssrc/pkg/core/sql"
 	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	utils "github.com/ByteGum/go-ssrc/utils"
 	"gorm.io/gorm"
@@ -123,6 +124,15 @@ func (i *Inscription) GetContent() InscriptionStructure {
 	return inscriptionStructure
 }
 
+// func (g *sql.GenericInscriptionModel) GetContent() InscriptionStructure {
+// 	var inscriptionStructure InscriptionStructure
+// 	err := json.Unmarshal([]byte(g.InscriptionBody), &inscriptionStructure)
+// 	if err != nil {
+// 		log.Println("Errr err:", err)
+// 	}
+// 	return inscriptionStructure
+// }
+
 func GetDataFromServer(mainCtx *context.Context, page *int) (*InscriptionResponses, error) {
 	// utils.Logger.Infof("GetDataFromServer page  : %d,  %d", *page, *index)
 
@@ -207,6 +217,34 @@ func SaveUnitInscription(db *gorm.DB, inscriptionResponse *InscriptionResponse) 
 		InscriptionId: inscriptionResponse.InscriptionId,
 	}
 	utils.Logger.Infof("@@@@SaveUnitInscription Type = %s  ", string(inscriptionResponse.Inscription.ContentType))
+	return db.Create(&data).Error
+}
+
+func SaveGenericInscription(db *gorm.DB, inscriptionResponse *InscriptionResponse) error {
+
+	next := ""
+	if inscriptionResponse.Next != nil {
+		next = *inscriptionResponse.Next
+	}
+	data := sql.GenericInscriptionModel{
+		InscriptionId:            inscriptionResponse.InscriptionId,
+		Address:                  inscriptionResponse.Address,
+		GenesisAddress:           inscriptionResponse.GenesisAddress,
+		GenesisFee:               int(*inscriptionResponse.GenesisFee),
+		GenesisHeight:            int(*inscriptionResponse.GenesisHeight),
+		InscriptionBody:          inscriptionResponse.Inscription.Body,
+		InscriptionContentLength: int(*inscriptionResponse.Inscription.ContentLength),
+		InscriptionContentType:   inscriptionResponse.Inscription.ContentType,
+		Next:                     next,
+		Previous:                 inscriptionResponse.Previous,
+		Number:                   int(*inscriptionResponse.Number),
+		ScriptPubkey:             inscriptionResponse.InscriptionOutput.ScriptPubkey,
+		Value:                    int(inscriptionResponse.InscriptionOutput.Value),
+		Sat:                      inscriptionResponse.Sat,
+		Satpoint:                 inscriptionResponse.Satpoint,
+		Timestamp:                inscriptionResponse.Timestamp,
+	}
+	utils.Logger.Infof("@@@@SaveGenericInscription Type = %s  ", string(inscriptionResponse.Inscription.ContentType))
 	return db.Create(&data).Error
 }
 
@@ -343,7 +381,7 @@ func PerformTransferOperation(db *gorm.DB, inscriptionStructure *InscriptionStru
 	return err
 }
 
-func CreditPendingOperation(db *gorm.DB, inscriptionStructure *InscriptionStructure, inscription InscriptionResponse, recieverAddress string) error {
+func CreditPendingOperation(db *gorm.DB, inscriptionStructure *InscriptionStructure, inscription sql.GenericInscriptionModel, recieverAddress string) error {
 
 	err := db.Transaction(func(tx *gorm.DB) error {
 
@@ -404,4 +442,37 @@ func CreditPendingOperation(db *gorm.DB, inscriptionStructure *InscriptionStruct
 	})
 
 	return err
+}
+
+func HandleCallback(db *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.GenericInscriptionModel, error) {
+
+	data := sql.GenericInscriptionModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionResponse.InscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+
+	next := ""
+	if inscriptionResponse.Next != nil {
+		next = *inscriptionResponse.Next
+	}
+	err = db.Model(&data).Updates(sql.GenericInscriptionModel{
+		Address:                  inscriptionResponse.Address,
+		GenesisAddress:           inscriptionResponse.GenesisAddress,
+		GenesisFee:               int(*inscriptionResponse.GenesisFee),
+		GenesisHeight:            int(*inscriptionResponse.GenesisHeight),
+		InscriptionBody:          inscriptionResponse.Inscription.Body,
+		InscriptionContentLength: int(*inscriptionResponse.Inscription.ContentLength),
+		InscriptionContentType:   inscriptionResponse.Inscription.ContentType,
+		Next:                     next,
+		Previous:                 inscriptionResponse.Previous,
+		Number:                   int(*inscriptionResponse.Number),
+		ScriptPubkey:             inscriptionResponse.InscriptionOutput.ScriptPubkey,
+		Value:                    int(inscriptionResponse.InscriptionOutput.Value),
+		Sat:                      inscriptionResponse.Sat,
+		Satpoint:                 inscriptionResponse.Satpoint,
+		Timestamp:                inscriptionResponse.Timestamp,
+	}).Error
+
+	return &data, nil
 }

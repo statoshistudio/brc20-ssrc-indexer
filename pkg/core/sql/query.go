@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 
+	// _ "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	"gorm.io/gorm"
 )
 
@@ -90,6 +91,33 @@ func GetAllInscriptions(db *gorm.DB, current int, perPage int) ([]InscriptionMod
 		return nil, err
 	}
 	return data, nil
+}
+
+func GetAllGenericInscriptions(db *gorm.DB, current int, perPage int) ([]GenericInscriptionModel, error) {
+
+	if current == 0 {
+		current = 1
+	}
+	if perPage == 0 {
+		perPage = 10
+	}
+
+	data := []GenericInscriptionModel{}
+	err := db.Limit(perPage).Offset(perPage * (current - 1)).Find(&data).Error
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func GetUnitGenericInscription(db *gorm.DB, inscriptionId string) (*GenericInscriptionModel, error) {
+
+	data := GenericInscriptionModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 func SaveNewAccount(db *gorm.DB, address string) (int, error) {
