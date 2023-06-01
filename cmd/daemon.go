@@ -5,10 +5,12 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"net"
 	"net/http"
@@ -16,16 +18,18 @@ import (
 
 	// "net/rpc/jsonrpc"
 
+	server "github.com/ByteGum/go-ssrc/pkg/core/api"
 	"github.com/ByteGum/go-ssrc/pkg/core/db"
-	"github.com/ByteGum/go-ssrc/pkg/core/evm/abis/stake"
+	indexer "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	processor "github.com/ByteGum/go-ssrc/pkg/core/processor"
 	rpcServer "github.com/ByteGum/go-ssrc/pkg/core/rpc"
+	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	ws "github.com/ByteGum/go-ssrc/pkg/core/ws"
 	utils "github.com/ByteGum/go-ssrc/utils"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/gorilla/websocket"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
+	"gorm.io/gorm"
 )
 
 var logger = utils.Logger
@@ -188,6 +192,11 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 	wg.Add(1)
 	go func() {
+		server.HandleRequest()
+	}()
+
+	wg.Add(1)
+	go func() {
 		sendHttp := rpcServer.NewHttpService(&ctx)
 		err := sendHttp.Start()
 		if err != nil {
@@ -196,75 +205,210 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		logger.Infof("New http connection")
 	}()
 
+	wg.Add(1)
+	go func() {
+		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
+		page := 0
+
+		inscriptionIdCh := make(chan string)
+		pendingTransferInscriptionCh := make(chan sql.PendingTransferInscriptionModel)
+
+		// resp, err := indexer.GetUnitDataByIdFromServer(&ctx, "e9ec244139fdd654e25085d88db97f740463bbc3757169a7a24c4bb62f10c8aci0")
+		// rr, _ := json.Marshal(resp)
+		// logger.Infof("TEST RUN  : %+s ", string(rr))
+
+		wg.Add(1)
+		go func() {
+			for {
+				resp, err := indexer.GetDataFromServer(&ctx, &page)
+				if err != nil {
+					logger.Fatal("indexer error: ", err)
+				}
+
+				logger.Infof("page index : %d", page)
+
+				_list := resp.Data
+
+				for i := len(_list) - 1; i >= 0; i-- {
+					inscriptionIdCh <- _list[i]
+				}
+				if resp.Meta.Pagination.Next != nil {
+					page = int(*resp.Meta.Pagination.Next)
+				} else {
+					time.Sleep(20 * time.Second)
+				}
+
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			for {
+				_list, err := sql.GetPendingInscriptions(sql.SqlDB)
+				utils.Logger.Infof("@@@@GetPendingInscriptions err = %d  ", len(_list))
+				if err != nil {
+					logger.Fatal("GetPendingInscriptions error: ", err)
+				}
+				for i := 0; i < len(_list); i++ {
+
+					pendingTransferInscriptionCh <- _list[i]
+				}
+
+				time.Sleep(20 * time.Second)
+
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			for {
+				select {
+
+				case id := <-inscriptionIdCh:
+					// utils.Logger.Infof("+_+_+___+_++_ Number:  %d  ", id)
+					func() {
+
+						inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, id)
+						if err != nil {
+							fmt.Println("--------")
+							fmt.Println(err)
+							return
+						}
+						if err := indexer.SaveGenericInscription(sql.SqlDB, inscription); err != nil {
+							// return any error will rollback
+							if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+								logger.Infof("Errr %s", err.Error())
+								return
+							}
+							panic(err)
+
+						}
+						acceptedTypes := [2]string{
+							"text/plain;charset=utf-8",
+							"application/json"}
+
+						if acceptedTypes[0] != inscription.Inscription.ContentType && acceptedTypes[1] != inscription.Inscription.ContentType {
+							return
+						}
+						if sql.SqlDBErr != nil {
+							logger.Infof("Errr %s", sql.SqlDBErr)
+						}
+
+						var staticInscriptionStructure indexer.StaticInscriptionStructure
+
+						err = json.Unmarshal(inscription.Inscription.Body, &staticInscriptionStructure)
+						if err != nil {
+							logger.Infof("Errr %s", err)
+						}
+
+						if staticInscriptionStructure.P == "brc-20" {
+							content := inscription.Inscription.GetContent()
+							sql.SqlDB.Transaction(func(tx *gorm.DB) error {
+
+								if err := indexer.SaveUnitInscription(tx, inscription); err != nil {
+									// return any error will rollback
+									return err
+								}
+
+								if content.Op == "deploy" {
+									if err := indexer.SaveNewToken(tx, &content, inscription.GenesisAddress); err != nil {
+										// return any error will rollback
+										return err
+									}
+								}
+								if content.Op == "mint" {
+									if err := indexer.PerformMintOperation(tx, &content, *inscription); err != nil {
+										// return any error will rollback
+										return err
+									}
+								}
+
+								if content.Op == "transfer" {
+									// genesisTransaction, err := indexer.GetUnitTransactionByIdFromServer(&ctx, inscription.GenesisAddress)
+									// if err != nil {
+									// 	logger.Infof("Transfer Errr : %s - %s", inscription.GenesisAddress, err)
+									// 	return err
+									// }
+									if err := indexer.PerformTransferOperation(tx, &content, *inscription, inscription.GenesisAddress); err != nil {
+										// return any error will rollback
+										return err
+									}
+								}
+
+								// return nil will commit the whole transaction
+								return tx.Commit().Error
+							})
+
+						}
+						sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
+					}()
+				case pendingTransferInscription := <-pendingTransferInscriptionCh:
+					func() {
+						utils.Logger.Infof("@@@@pendingTransferInscription err = %s  ", pendingTransferInscription.InscriptionId)
+						inscription, err := sql.GetUnitGenericInscription(sql.SqlDB, pendingTransferInscription.InscriptionId)
+						// sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
+						if err != nil {
+							fmt.Println("--------")
+							fmt.Println(err)
+							return
+						}
+
+						if pendingTransferInscription.GenesisAddress == inscription.Address {
+							logger.Infof("@@@ Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+							return
+						}
+						logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+						if sql.SqlDBErr != nil {
+							logger.Infof("Errr %s", sql.SqlDBErr)
+						}
+						currentOwner := ""
+						previousOwner := ""
+						txAddress := strings.Split(inscription.Satpoint, ":")[0]
+
+						for i := 0; i < 1000; i++ {
+							if currentOwner == pendingTransferInscription.GenesisAddress {
+								break
+							}
+							nextTransaction, err := indexer.GetUnitTransactionByIdFromServer(&ctx, txAddress)
+							if err != nil {
+								logger.Infof("genesisTransaction Errr %s", err)
+							}
+							previousOwner = currentOwner
+							currentOwner = nextTransaction.Data.Transaction.Output[0].Address
+							txAddress = strings.Split(nextTransaction.Data.Transaction.Input[0].PreviousOutput, ":")[0]
+
+						}
+
+						// content := inscription.Inscription.GetContent()
+						var content indexer.InscriptionStructure
+						err = json.Unmarshal([]byte(inscription.InscriptionBody), &content)
+						if err != nil {
+							log.Println("Errr err:", err)
+							return
+						}
+						if err := indexer.CreditPendingOperation(sql.SqlDB, &content, *inscription, previousOwner); err != nil {
+							// return any error will rollback
+							logger.Infof("@@@ @@@@@@NOT Thesame AFTER Errrr %s", err)
+							return
+						}
+
+						logger.Infof("@@@ @@@@@@NOT Thesame AFTER pendingTransferInscription.Address == inscription.Address %s == %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address, previousOwner)
+
+						//Perform Overations
+
+						//Perform Overations
+
+						//Perform Overations
+
+						// sql.SqlDB.Delete(&pendingTransferInscription)
+
+					}()
+
+				}
+
+			}
+		}()
+
+	}()
+
 }
-
-func parserEvent(vLog types.Log, eventName string) {
-	event := stake.StakeStakeEvent{}
-	contractAbi, err := abi.JSON(strings.NewReader(string(stake.StakeMetaData.ABI)))
-
-	if err != nil {
-		log.Fatal("contractAbi, err", err)
-	}
-	_err := contractAbi.UnpackIntoInterface(&event, eventName, vLog.Data)
-	if _err != nil {
-		log.Fatal("_err :  ", _err)
-	}
-
-	fmt.Println(event.Account) // foo
-	fmt.Println(event.Amount)
-	fmt.Println(event.Timestamp)
-}
-
-var lobbyConn = []*websocket.Conn{}
-var verifiedConn = []*websocket.Conn{}
-
-// func ServeWebSocket(w http.ResponseWriter, r *http.Request) {
-
-// 	c, err := upgrader.Upgrade(w, r, nil)
-// 	log.Print("New ServeWebSocket c : ", c.RemoteAddr())
-
-// 	if err != nil {
-// 		log.Print("upgrade:", err)
-// 		return
-// 	}
-// 	defer c.Close()
-// 	hasVerifed := false
-// 	time.AfterFunc(5000*time.Millisecond, func() {
-
-// 		if !hasVerifed {
-// 			c.Close()
-// 		}
-// 	})
-// 	_close := func(code int, t string) error {
-// 		logger.Infof("code: %d, t: %s \n", code, t)
-// 		return errors.New("Closed ")
-// 	}
-// 	c.SetCloseHandler(_close)
-// 	for {
-// 		mt, message, err := c.ReadMessage()
-// 		if err != nil {
-// 			log.Println("read:", err)
-// 			break
-
-// 		} else {
-// 			err = c.WriteMessage(mt, (append(message, []byte("recieved Signature")...)))
-// 			if err != nil {
-// 				log.Println("Error:", err)
-// 			} else {
-// 				// signature := string(message)
-// 				verifiedRequest, _ := utils.VerificationRequestFromBytes(message)
-// 				log.Println("verifiedRequest.Message: ", verifiedRequest.Message)
-
-// 				if utils.VerifySignature(verifiedRequest.Signer, verifiedRequest.Message, verifiedRequest.Signature) {
-// 					verifiedConn = append(verifiedConn, c)
-// 					hasVerifed = true
-// 					log.Println("Verification was successful: ", verifiedRequest)
-// 				}
-// 				log.Println("message:", string(message))
-// 				log.Printf("recv: %s - %d - %s\n", message, mt, c.RemoteAddr())
-// 			}
-
-// 		}
-// 	}
-
-// }

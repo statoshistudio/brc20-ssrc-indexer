@@ -7,6 +7,7 @@ require (
 	github.com/dgraph-io/badger v1.6.2
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/gin-gonic/gin v1.7.4
+	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-ipfs-api v0.3.0
@@ -18,10 +19,14 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.19.0
 	github.com/libp2p/go-libp2p-pubsub v0.8.1
 	github.com/matoous/go-nanoid/v2 v2.0.0
+	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/multiformats/go-multiaddr v0.8.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
+	gorm.io/driver/mysql v1.5.1
+	gorm.io/driver/sqlite v1.5.0
+	gorm.io/gorm v1.25.1
 )
 
 require (
@@ -51,6 +56,7 @@ require (
 	github.com/go-playground/locales v0.13.0 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/go-playground/validator/v10 v10.4.1 // indirect
+	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
@@ -76,6 +82,8 @@ require (
 	github.com/ipld/go-ipld-prime v0.14.2 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.14 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
