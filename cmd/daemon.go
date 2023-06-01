@@ -18,7 +18,6 @@ import (
 
 	"github.com/ByteGum/go-ssrc/pkg/core/db"
 	"github.com/ByteGum/go-ssrc/pkg/core/evm/abis/stake"
-	p2p "github.com/ByteGum/go-ssrc/pkg/core/p2p"
 	processor "github.com/ByteGum/go-ssrc/pkg/core/processor"
 	rpcServer "github.com/ByteGum/go-ssrc/pkg/core/rpc"
 	ws "github.com/ByteGum/go-ssrc/pkg/core/ws"
@@ -117,7 +116,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, utils.PublishedSubChId, &utils.PublishedSubC)
 
 	var wg sync.WaitGroup
-	errc := make(chan error)
+	// errc := make(chan error)
 
 	channelSubscriptionStore := db.New(&ctx, utils.ChannelSubscriptionStore)
 	newChannelSubscriptionStore := db.New(&ctx, utils.NewChannelSubscriptionStore)
@@ -165,17 +164,6 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 		}
 	}()
-
-	wg.Add(1)
-	go func() {
-
-		if err := recover(); err != nil {
-			wg.Done()
-			errc <- fmt.Errorf("P2P error: %g", err)
-		}
-		p2p.Run(&ctx)
-	}()
-
 	wg.Add(1)
 	go func() {
 		rpc.Register(rpcServer.NewRpcService(&ctx))

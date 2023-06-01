@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -12,9 +11,9 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "go-icm",
-	Short: "Decentralized messaging platform",
-	Long: `This is a decentralized messaging platform:
+	Use:   "go-ssrc",
+	Short: "Universal Ordinals indexer",
+	Long: `This is a universal ordinals indexer:
 
 Use this at your own risk.`,
 	// Uncomment the following line if your bare application
