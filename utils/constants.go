@@ -50,6 +50,7 @@ const (
 	PubSubBlockChId                        = "PubSubBlockChannel"
 	PubsubDeliverProofChId                 = "PubsubProofChannel"
 	PublishedSubChId                       = "PublishedSubChannel"
+	PageKeyValue                           = "@@@PageIndex"
 )
 
 // State store key
