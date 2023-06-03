@@ -181,7 +181,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
 		page := 0
 		_config, err := sql.GetConfig(sql.SqlDB, utils.LastIndexedPageKey)
-		logger.Infof("Getting config %s:%s", _config.Key, _config.Value)
+		// logger.Infof("Getting config %s:%s", _config.Key, _config.Value)
 		if err == nil {
 			page, err = strconv.Atoi(_config.Value)
 			logger.Infof("Starting from page %d", page)
