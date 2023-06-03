@@ -154,7 +154,7 @@ func GetAllPendingTransactions(db *gorm.DB, current int, perPage int) ([]Pending
 func GetConfig(db *gorm.DB, key string) (*ConfigModel, error) {
 
 	data := ConfigModel{}
-	err := db.First(&data, "key = ?", key).Error
+	err := db.Where(&ConfigModel{Key: key}).First(&data).Error
 	if err != nil {
 		return nil, err
 	}

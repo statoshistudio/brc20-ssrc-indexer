@@ -14,6 +14,7 @@ import (
 	// "github.com/ByteGum/go-ssrc/pkg/core/sql"
 	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	utils "github.com/ByteGum/go-ssrc/utils"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -164,7 +165,7 @@ func GetDataFromServer(mainCtx *context.Context, page *int) (*InscriptionRespons
 	// utils.Logger.Infof("GetDataFromServer page  : %d,  %d", *page, *index)
 
 	cfg, _ := (*mainCtx).Value(utils.ConfigKey).(*utils.Configuration)
-	utils.Logger.Infof("GetDataFromServer page neV : %d,  %s", *page, fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
+	utils.Logger.Infof("GetDataFromServer page #: %d,  %s", *page, fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
 	resp, err1 := http.Get(fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
 	if err1 != nil {
 		return nil, err1
@@ -272,17 +273,18 @@ func SaveGenericInscription(db *gorm.DB, inscriptionResponse *InscriptionRespons
 		Satpoint:                 inscriptionResponse.Satpoint,
 		Timestamp:                inscriptionResponse.Timestamp,
 	}
-	utils.Logger.Infof("@@@@SaveGenericInscription  id %s", inscriptionResponse.InscriptionId)
+	utils.Logger.WithFields(logrus.Fields{"id": inscriptionResponse.InscriptionId}).Infof("@@@@SaveGenericInscription  id %s", inscriptionResponse.InscriptionId)
 	create := sql.SqlDB.Transaction(func(tx *gorm.DB) error {
 		update := tx.Model(&data).Where("inscription_id = ?", inscriptionResponse.InscriptionId).Updates(&data)
 		if update.Error != nil {
 			utils.Logger.Infof("Update Error %s", update.Error.Error())
 			return update.Error
 		}
+
 		if update.RowsAffected == 0 {
 			return tx.Create(&data).Error
 		}
-		return tx.Commit().Error
+		return nil
 	})
 
 	return create

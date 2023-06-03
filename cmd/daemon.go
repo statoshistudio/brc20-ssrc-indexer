@@ -22,18 +22,19 @@ import (
 	server "github.com/ByteGum/go-ssrc/pkg/core/api"
 	"github.com/ByteGum/go-ssrc/pkg/core/db"
 	indexer "github.com/ByteGum/go-ssrc/pkg/core/indexer"
-	processor "github.com/ByteGum/go-ssrc/pkg/core/processor"
 	rpcServer "github.com/ByteGum/go-ssrc/pkg/core/rpc"
 	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	ws "github.com/ByteGum/go-ssrc/pkg/core/ws"
 	utils "github.com/ByteGum/go-ssrc/utils"
 	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slices"
 	"gorm.io/gorm"
 )
 
-var logger = utils.Logger
+var logger = &utils.Logger
 
 const (
 	TESTNET string = "/icm/testing"
@@ -86,8 +87,6 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	cfg := utils.Config
 	ctx := context.Background()
 
-	connectedSubscribers := map[string]map[string][]*websocket.Conn{}
-
 	rpcPort, err := cmd.Flags().GetString(string(RPC_PORT))
 	wsAddress, err := cmd.Flags().GetString(string(WS_ADDRESS))
 	network, err := cmd.Flags().GetString(string(NETWORK))
@@ -123,52 +122,12 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 	// errc := make(chan error)
 
-	channelSubscriptionStore := db.New(&ctx, utils.ChannelSubscriptionStore)
 	newChannelSubscriptionStore := db.New(&ctx, utils.NewChannelSubscriptionStore)
-
-	unconfurmedBlockStore := db.New(&ctx, utils.UnconfirmedDeliveryProofStore)
 
 	ctx = context.WithValue(ctx, utils.NewChannelSubscriptionStore, newChannelSubscriptionStore)
 
 	defer wg.Wait()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-
-			case clientHandshake, ok := <-utils.ClientHandshakeC:
-				if !ok {
-					logger.Errorf("Verification channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go processor.ValidateMessageClient(ctx, &connectedSubscribers, clientHandshake, channelSubscriptionStore)
-
-			case batch, ok := <-utils.PubSubInputBlockC:
-				if !ok {
-					logger.Errorf("PubsubInputBlock channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go func() {
-					unconfurmedBlockStore.Put(ctx, db.Key(batch.Key()), batch.ToJSON())
-				}()
-			case proof, ok := <-utils.PubSubInputProofC:
-				if !ok {
-					logger.Errorf("PubsubInputBlock channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go func() {
-					unconfurmedBlockStore.Put(ctx, db.Key(proof.BlockKey()), proof.ToJSON())
-				}()
-
-			}
-
-		}
-	}()
 	wg.Add(1)
 	go func() {
 		rpc.Register(rpcServer.NewRpcService(&ctx))
@@ -201,7 +160,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		sendHttp := rpcServer.NewHttpService(&ctx)
 		err := sendHttp.Start()
 		if err != nil {
-			logger.Fatalf("Http error: ", err)
+			logger.Fatalf("Http error: %s", err.Error())
 		}
 		logger.Infof("New http connection")
 	}()
@@ -210,9 +169,11 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	go func() {
 		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
 		page := 0
-		_config, err := sql.GetConfig(sql.SqlDB, utils.PageKeyValue)
+		_config, err := sql.GetConfig(sql.SqlDB, utils.LastIndexedPageKey)
+		logger.Infof("Getting config %s:%s", _config.Key, _config.Value)
 		if err == nil {
 			page, err = strconv.Atoi(_config.Value)
+			logger.Infof("Starting from page %d", page)
 			if err != nil {
 				page = 0
 			}
@@ -233,6 +194,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 				resp, err := indexer.GetDataFromServer(&ctx, &page)
 				if err != nil {
 					logger.Fatal("indexer error: ", err)
+					panic(err)
 				}
 
 				logger.Infof("page index : %d", page)
@@ -242,13 +204,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 				for i := len(_list) - 1; i >= 0; i-- {
 					inscriptionIdCh <- _list[i]
 				}
+				_page := strconv.Itoa(page)
+				_, configError := sql.SetConfig(sql.SqlDB, utils.LastIndexedPageKey, _page)
+				if configError != nil {
+					logger.Errorf("Setting last indexed page sql error: %s", err)
+				}
 				if resp.Meta.Pagination.Next != nil {
 					page = int(*resp.Meta.Pagination.Next)
-					_page := strconv.Itoa(page)
-					_, err := sql.SetConfig(sql.SqlDB, utils.PageKeyValue, _page)
-					if err != nil {
-						logger.Infof("sql.SetConfig Errr %s", err)
-					}
 				} else {
 					time.Sleep(20 * time.Second)
 				}
@@ -286,34 +248,36 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 						inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, id)
 						if err != nil {
 							fmt.Println("--------")
-							fmt.Println(err)
-							return
+							logger.Errorf("Error %s", err.Error())
+							panic(err)
+
 						}
 						if err := indexer.SaveGenericInscription(sql.SqlDB, inscription); err != nil {
 							// return any error will rollback
 							if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
-								logger.Infof("Errr %s", err.Error())
+								logger.Debugf("Errr %s", err.Error())
 								return
 							}
 							panic(err)
 
 						}
-						acceptedTypes := [2]string{
+						if sql.SqlDBErr != nil {
+							logger.Errorf("SQLDB ERROR %s", sql.SqlDBErr)
+						}
+						acceptedTypes := []string{
 							"text/plain;charset=utf-8",
 							"application/json"}
 
-						if acceptedTypes[0] != inscription.Inscription.ContentType && acceptedTypes[1] != inscription.Inscription.ContentType {
+						if slices.Index(acceptedTypes, inscription.Inscription.ContentType) == -1 {
 							return
-						}
-						if sql.SqlDBErr != nil {
-							logger.Infof("Errr %s", sql.SqlDBErr)
 						}
 
 						var staticInscriptionStructure indexer.StaticInscriptionStructure
 
 						err = json.Unmarshal(inscription.Inscription.Body, &staticInscriptionStructure)
 						if err != nil {
-							logger.Infof("Errr %s", err)
+							logger.WithFields(logrus.Fields{"id": inscription.InscriptionId}).Infof("Body not a json: %s", err.Error())
+							return
 						}
 
 						if staticInscriptionStructure.P == "brc-20" {
@@ -351,7 +315,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 								}
 
 								// return nil will commit the whole transaction
-								return tx.Commit().Error
+								return nil
 							})
 
 						}
@@ -374,7 +338,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 						}
 						logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
 						if sql.SqlDBErr != nil {
-							logger.Infof("Errr %s", sql.SqlDBErr)
+							logger.Infof("Error Getting pending  %s", sql.SqlDBErr)
 						}
 						currentOwner := ""
 						previousOwner := ""
@@ -398,7 +362,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 						var content indexer.InscriptionStructure
 						err = json.Unmarshal([]byte(inscription.InscriptionBody), &content)
 						if err != nil {
-							log.Println("Errr err:", err)
+							log.Println("Unmershaling error:", err)
 							return
 						}
 						if err := indexer.CreditPendingOperation(sql.SqlDB, &content, *inscription, previousOwner); err != nil {
