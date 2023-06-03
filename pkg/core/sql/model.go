@@ -70,7 +70,7 @@ type GenericInscriptionModel struct {
 	Timestamp                string `json:"timestamp"`
 }
 type ConfigModel struct {
-	// gorm.Model
+	gorm.Model
 	Key   string `gorm:"unique"`
 	Value string `gorm:"value"`
 }
