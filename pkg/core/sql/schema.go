@@ -2,6 +2,14 @@ package sql
 
 const File string = "./data/sql/indexer.db"
 
+const CreateConfigTable string = `
+CREATE TABLE IF NOT EXISTS config_models (
+	id INTEGER NOT NULL PRIMARY KEY,
+	key VARCHAR(255) UNIQUE,
+    value VARCHAR(255),
+	);
+`
+
 const CreateAccountTable string = `
 CREATE TABLE IF NOT EXISTS accounts (
 	id INTEGER NOT NULL PRIMARY KEY,
@@ -54,4 +62,4 @@ CREATE TABLE IF NOT EXISTS inscriptions (
 	);
 `
 
-var Migrations = []string{CreateAccountTable, CreateBrc20AccountBalanceTable, CreateBrc20TokenTable, CreateInscriptionTable}
+var Migrations = []string{CreateConfigTable, CreateAccountTable, CreateBrc20AccountBalanceTable, CreateBrc20TokenTable, CreateInscriptionTable}
