@@ -99,8 +99,9 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		cfg.Network = network
 	}
 
-	if rpcPort == utils.DefaultRPCPort && len(cfg.RPCPort) > 0 {
-		rpcPort = cfg.RPCPort
+	rpcPort = cfg.RPCPort
+	if len(cfg.RPCPort) == 0 {
+		rpcPort = zutils.DefaultRPCPort
 	}
 
 	ctx = context.WithValue(ctx, utils.ConfigKey, &cfg)

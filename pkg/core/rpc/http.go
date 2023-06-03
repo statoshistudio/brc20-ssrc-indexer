@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/rpc"
 
@@ -76,12 +77,11 @@ func (p *HttpService) sendHttp(w http.ResponseWriter, r *http.Request) {
 
 func (p *HttpService) Start() error {
 
-	hostname := "localhost"
-	port := ":9521"
-	client, err := rpc.DialHTTP("tcp", hostname+port)
+	host := fmt.Sprintf("%s:%s", p.Cfg.RPCHost, p.Cfg.RPCHttpPort)
+	client, err := rpc.DialHTTP("tcp", host)
 
 	if err != nil {
-		utils.Logger.Errorf("Rpc Error::", err)
+		utils.Logger.Errorf("Rpc Error:: %s", err.Error())
 		return err
 	}
 	utils.Logger.Info("Dial to rpc successful!")
