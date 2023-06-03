@@ -77,7 +77,8 @@ func (p *HttpService) sendHttp(w http.ResponseWriter, r *http.Request) {
 
 func (p *HttpService) Start() error {
 
-	host := fmt.Sprintf("%s:%s", p.Cfg.RPCHost, p.Cfg.RPCHttpPort)
+	host := fmt.Sprintf("%s:%s", p.Cfg.RPCHost, p.Cfg.RPCPort)
+	utils.Logger.Infof("RPC server runing on: %s", host)
 	client, err := rpc.DialHTTP("tcp", host)
 
 	if err != nil {

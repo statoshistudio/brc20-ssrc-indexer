@@ -19,7 +19,7 @@ import (
 
 	// "net/rpc/jsonrpc"
 
-	server "github.com/ByteGum/go-ssrc/pkg/core/api"
+	ordApi "github.com/ByteGum/go-ssrc/pkg/core/api"
 	"github.com/ByteGum/go-ssrc/pkg/core/db"
 	indexer "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	rpcServer "github.com/ByteGum/go-ssrc/pkg/core/rpc"
@@ -47,6 +47,7 @@ const (
 	NODE_PRIVATE_KEY Flag = "node-private-key"
 	NETWORK               = "network"
 	RPC_PORT         Flag = "rpc-port"
+	RPC_HTTP_PORT    Flag = "rpc-http-port"
 	WS_ADDRESS       Flag = "ws-address"
 )
 const MaxDeliveryProofBlockSize = 1000
@@ -74,6 +75,7 @@ func init() {
 	daemonCmd.Flags().StringP(string(NODE_PRIVATE_KEY), "k", "", "The node private key. This is the nodes identity")
 	daemonCmd.Flags().StringP(string(NETWORK), "m", MAINNET, "Network mode")
 	daemonCmd.Flags().StringP(string(RPC_PORT), "p", utils.DefaultRPCPort, "RPC server port")
+	daemonCmd.Flags().StringP(string(RPC_HTTP_PORT), "r", utils.DefaultRPCPort, "RPC http client port")
 	daemonCmd.Flags().StringP(string(WS_ADDRESS), "w", utils.DefaultWebSocketAddress, "http service address")
 }
 
@@ -88,6 +90,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
 
 	rpcPort, err := cmd.Flags().GetString(string(RPC_PORT))
+	rpcHttpPort, err := cmd.Flags().GetString(string(RPC_HTTP_PORT))
+	rpcHttpPort = cfg.RPCHttpPort
+	if len(cfg.RPCPort) == 0 {
+		rpcHttpPort = utils.DefaultRPCHttpPort
+	}
+	cfg.RPCHttpPort = rpcHttpPort
+
 	wsAddress, err := cmd.Flags().GetString(string(WS_ADDRESS))
 	network, err := cmd.Flags().GetString(string(NETWORK))
 	if err != nil || len(network) == 0 {
@@ -101,8 +110,9 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 	rpcPort = cfg.RPCPort
 	if len(cfg.RPCPort) == 0 {
-		rpcPort = zutils.DefaultRPCPort
+		rpcPort = utils.DefaultRPCPort
 	}
+	cfg.RPCPort = rpcPort
 
 	ctx = context.WithValue(ctx, utils.ConfigKey, &cfg)
 	ctx = context.WithValue(ctx, utils.IncomingMessageChId, &utils.IncomingMessagesP2P2_D_c)
@@ -153,7 +163,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 	wg.Add(1)
 	go func() {
-		server.HandleRequest()
+		ordApi.HandleRequest()
 	}()
 
 	wg.Add(1)

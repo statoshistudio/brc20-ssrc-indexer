@@ -9,8 +9,9 @@ const (
 )
 
 const (
-	DefaultRPCPort          string = "9521"           // time interval within which to accept a handshake
-	DefaultWebSocketAddress string = "localhost:8088" // time interval within which to accept a handshake
+	DefaultRPCPort          string = "9521"
+	DefaultRPCHttpPort      string = "9522"
+	DefaultWebSocketAddress string = "localhost:8088"
 )
 
 const (
