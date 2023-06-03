@@ -17,9 +17,10 @@ import (
 )
 
 var ctx context.Context
+var cfg utils.Configuration
 
 func init() {
-	cfg := utils.Config
+	cfg = utils.Config
 	ctx = context.Background()
 
 	ctx = context.WithValue(ctx, utils.ConfigKey, &cfg)
@@ -44,7 +45,7 @@ func HandleRequest() {
 	// http.HandleFunc("/tokens", getTokens)
 	// http.HandleFunc("/inscriptions", getInscriptions)
 
-	log.Fatal(http.ListenAndServe(":8088", r))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%s", cfg.APIHost, cfg.APIHttpPort), r))
 
 }
 

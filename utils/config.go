@@ -44,6 +44,8 @@ type Configuration struct {
 	OrdinalApi               string         `mapstructure:"ordinal_api"`
 	DbDriver                 string         `mapstructure:"db_driver"`
 	DbDSN                    string         `mapstructure:"db_dsn"`
+	APIHttpPort              string         `mapstructure:"api_port"`
+	APIHost                  string         `mapstructure:"api_host"`
 }
 
 var (
