@@ -69,3 +69,8 @@ type GenericInscriptionModel struct {
 	Satpoint                 string `json:"satpoint"`
 	Timestamp                string `json:"timestamp"`
 }
+type ConfigModel struct {
+	gorm.Model
+	Key   string `gorm:"unique"`
+	Value string `gorm:"value"`
+}

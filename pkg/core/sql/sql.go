@@ -31,6 +31,7 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	if err != nil {
 		return nil, err
 	}
+	db.AutoMigrate(&ConfigModel{})
 	db.AutoMigrate(&InscriptionModel{})
 	db.AutoMigrate(&GenericInscriptionModel{})
 	db.AutoMigrate(&Brc20TokenModel{})

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -209,6 +210,15 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	go func() {
 		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
 		page := 0
+		_config, err := sql.GetConfig(sql.SqlDB, utils.PageKeyValue)
+		if err == nil {
+			page, err = strconv.Atoi(_config.Value)
+			if err != nil {
+				page = 0
+			}
+		} else {
+			logger.Infof("sql.GetConfig Errr %s", err)
+		}
 
 		inscriptionIdCh := make(chan string)
 		pendingTransferInscriptionCh := make(chan sql.PendingTransferInscriptionModel)
@@ -234,6 +244,11 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 				}
 				if resp.Meta.Pagination.Next != nil {
 					page = int(*resp.Meta.Pagination.Next)
+					_page := strconv.Itoa(page)
+					_, err := sql.SetConfig(sql.SqlDB, utils.PageKeyValue, _page)
+					if err != nil {
+						logger.Infof("sql.SetConfig Errr %s", err)
+					}
 				} else {
 					time.Sleep(20 * time.Second)
 				}

@@ -150,3 +150,23 @@ func GetAllPendingTransactions(db *gorm.DB, current int, perPage int) ([]Pending
 
 	return data, nil
 }
+
+func GetConfig(db *gorm.DB, key string) (*ConfigModel, error) {
+
+	data := ConfigModel{}
+	err := db.First(&data, "key = ?", key).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func SetConfig(db *gorm.DB, key string, value string) (*ConfigModel, error) {
+
+	data := ConfigModel{}
+	err := db.Where(ConfigModel{Key: key}).Assign(ConfigModel{Value: value}).FirstOrCreate(&data).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
