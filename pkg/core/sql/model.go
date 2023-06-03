@@ -71,6 +71,6 @@ type GenericInscriptionModel struct {
 }
 type ConfigModel struct {
 	gorm.Model
-	Key   string `gorm:"unique"`
-	Value string `gorm:"value"`
+	Key   string `gorm:"name;unique"`
+	Value string `gorm:"val"`
 }
