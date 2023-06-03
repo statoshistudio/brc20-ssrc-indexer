@@ -3,7 +3,7 @@ package sql
 const File string = "./data/sql/indexer.db"
 
 const CreateConfigTable string = `
-CREATE TABLE IF NOT EXISTS config_models (
+CREATE TABLE IF NOT EXISTS config (
 	id INTEGER NOT NULL PRIMARY KEY,
 	key VARCHAR(255) UNIQUE,
     value VARCHAR(255),
