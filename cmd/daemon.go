@@ -147,8 +147,16 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal("ListenTCP error: ", err)
 		}
-		logger.Infof("RPC server runing on: %+s", cfg.RPCHost+":"+rpcPort)
+
 		go http.Serve(listener, nil)
+		time.Sleep(3000)
+		logger.Infof("RPC server runing on: %+s", cfg.RPCHost+":"+rpcPort)
+		sendHttp := rpcServer.NewHttpService(&ctx)
+		err = sendHttp.Start()
+		if err != nil {
+			logger.Fatalf("Http error: %s", err.Error())
+		}
+		logger.Infof("New http connection")
 
 	}()
 
@@ -164,16 +172,6 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	wg.Add(1)
 	go func() {
 		ordApi.HandleRequest()
-	}()
-
-	wg.Add(1)
-	go func() {
-		sendHttp := rpcServer.NewHttpService(&ctx)
-		err := sendHttp.Start()
-		if err != nil {
-			logger.Fatalf("Http error: %s", err.Error())
-		}
-		logger.Infof("New http connection")
 	}()
 
 	wg.Add(1)

@@ -53,7 +53,7 @@ func (p *HttpService) sendHttp(w http.ResponseWriter, r *http.Request) {
 
 	jData, err := json.Marshal(reply)
 	if err != nil {
-		utils.Logger.Errorf("marshal json error::", err)
+		utils.Logger.Errorf("marshal json error:: %s", err.Error())
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jData)
