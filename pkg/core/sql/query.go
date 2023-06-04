@@ -2,6 +2,9 @@ package sql
 
 import (
 	"fmt"
+	"time"
+
+	"gorm.io/datatypes"
 
 	// _ "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	"gorm.io/gorm"
@@ -120,10 +123,33 @@ func GetUnitGenericInscription(db *gorm.DB, inscriptionId string) (*GenericInscr
 	return &data, nil
 }
 
+func GetUpdatedInscription(db *gorm.DB, inscriptionId string) (*UpdatedInscriptionsModel, error) {
+
+	data := UpdatedInscriptionsModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func SaveUpdatedInscription(db *gorm.DB, inscriptionId string) (int, error) {
+
+	data := UpdatedInscriptionsModel{InscriptionId: inscriptionId}
+	err := db.Create(&data).Error
+	if err != nil {
+		return -1, err
+	}
+	return int(data.ID), nil
+}
+
 func SaveNewAccount(db *gorm.DB, address string) (int, error) {
 
 	data := AccountModel{Address: address}
-	db.Create(&data)
+	err := db.Create(&data).Error
+	if err != nil {
+		return -1, err
+	}
 	return int(data.ID), nil
 }
 
@@ -150,7 +176,19 @@ func GetAllPendingTransactions(db *gorm.DB, current int, perPage int) ([]Pending
 
 	return data, nil
 }
+func GetUpdatedInscriptions(db *gorm.DB, perPage int) ([]UpdatedInscriptionsModel, error) {
 
+	if perPage == 0 {
+		perPage = 200
+	}
+
+	data := []UpdatedInscriptionsModel{}
+	err := db.Limit(perPage).Where("createdAt > ?", datatypes.Date(time.Now().Add(4*time.Minute))).Error
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
 func GetConfig(db *gorm.DB, key string) (*ConfigModel, error) {
 
 	data := ConfigModel{}

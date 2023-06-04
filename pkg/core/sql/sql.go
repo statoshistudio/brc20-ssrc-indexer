@@ -1,8 +1,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/ByteGum/go-ssrc/utils"
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/mysql"
@@ -38,6 +36,7 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	db.AutoMigrate(&AccountModel{})
 	db.AutoMigrate(&Brc20TokenAccountBalanceModel{})
 	db.AutoMigrate(&PendingTransferInscriptionModel{})
+	db.AutoMigrate(&UpdatedInscriptionsModel{})
 	// for _, m := range migrations {
 	// 	if _, err := db.Exec(m); err != nil {
 	// 		return nil, err
@@ -51,7 +50,6 @@ func init() {
 	cfg := utils.Config
 
 	SqlDB, SqlDBErr = InitializeDb(cfg.DbDriver, cfg.DbDSN, Migrations)
-	fmt.Printf("%s/indexer.db = %s\n ", cfg.DataDir, SqlDBErr)
 	if SqlDBErr != nil {
 		panic(SqlDBErr)
 	}

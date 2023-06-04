@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	// "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	"github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	sql_mod "github.com/ByteGum/go-ssrc/pkg/core/sql"
 	"github.com/ByteGum/go-ssrc/utils"
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 )
 
 var ctx context.Context
@@ -262,45 +262,90 @@ func getPendingTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(4 * time.Second)
-	w.Header().Set("Content-Type", "application/json")
 
+	w.Header().Set("Content-Type", "application/json")
+	message := make(map[string]string)
 	inscription_id := r.URL.Query().Get("inscription_id")
 	// txId := r.URL.Query().Get("txId")
 	// index := r.URL.Query().Get("index")
 	// offset := r.URL.Query().Get("indoffsetex")
 	// apiKey := r.URL.Query().Get("apiKey")
 
-	message := make(map[string]string)
+	// check if it is an existing one
 	if len(inscription_id) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		message["message"] = "inscription_id is required"
 		json.NewEncoder(w).Encode(message)
 		return
 	}
-	inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
 
+	_, err := sql_mod.GetUnitGenericInscription(sql_mod.SqlDB, inscription_id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			w.WriteHeader(http.StatusOK)
+			message["message"] = "New inscription"
+			json.NewEncoder(w).Encode(message)
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
 		message["message"] = err.Error()
-		message["inscriptionId"] = inscription_id
-		fmt.Println("--------")
-		fmt.Println(message)
 		json.NewEncoder(w).Encode(message)
 		return
 	}
-	result, err := indexer.HandleCallback(sql_mod.SqlDB, *inscription)
+	_, err = sql_mod.SaveUpdatedInscription(sql_mod.SqlDB, inscription_id)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-
+		w.WriteHeader(http.StatusBadGateway)
 		message["message"] = err.Error()
-		message["inscriptionId"] = inscription_id
-		fmt.Println("--------")
-		fmt.Println(message)
 		json.NewEncoder(w).Encode(message)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
+	message["message"] = inscription_id
+	json.NewEncoder(w).Encode(message)
+	return
 
-	json.NewEncoder(w).Encode(result)
+	// inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
+	// if err != nil {
+	// 	w.WriteHeader(http.StatusInternalServerError)
+
+	// 	message["message"] = err.Error()
+	// 	message["inscriptionId"] = inscription_id
+	// 	fmt.Println("--------")
+	// 	fmt.Println(message)
+	// 	json.NewEncoder(w).Encode(message)
+	// 	return
+	// }
+
+	// go func() {
+	// 	for i := 0; i < 5; i++ {
+	// 		time.Sleep(4 * time.Second)
+	// 		inscription, err = indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
+	// 		if err != nil {
+	// 			w.WriteHeader(http.StatusInternalServerError)
+
+	// 			message["message"] = err.Error()
+	// 			message["inscriptionId"] = inscription_id
+	// 			fmt.Println("--------")
+	// 			fmt.Println(message)
+	// 			json.NewEncoder(w).Encode(message)
+	// 			continue
+	// 		}
+	// 		_, err := indexer.HandleCallback(sql_mod.SqlDB, *inscription)
+	// 		if err != nil {
+	// 			w.WriteHeader(http.StatusNotFound)
+
+	// 			message["message"] = err.Error()
+	// 			message["inscriptionId"] = inscription_id
+	// 			fmt.Println("--------")
+	// 			fmt.Println(message)
+	// 			json.NewEncoder(w).Encode(message)
+	// 			continue
+	// 		}
+	// 		break
+	// 	}
+
+	// }()
+
+	//json.NewEncoder(w).Encode(inscription)
 
 }

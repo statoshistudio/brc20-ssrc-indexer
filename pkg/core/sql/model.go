@@ -69,6 +69,12 @@ type GenericInscriptionModel struct {
 	Satpoint                 string `json:"satpoint"`
 	Timestamp                string `json:"timestamp"`
 }
+
+type UpdatedInscriptionsModel struct {
+	gorm.Model
+	ID            int64  `gorm:"primaryKey;autoIncrement:true"`
+	InscriptionId string `gorm:"inscription_id"`
+}
 type ConfigModel struct {
 	gorm.Model
 	Key   string `gorm:"key;unique"`

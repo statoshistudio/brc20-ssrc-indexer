@@ -62,4 +62,11 @@ CREATE TABLE IF NOT EXISTS inscriptions_models (
 	);
 `
 
-var Migrations = []string{CreateConfigTable, CreateAccountTable, CreateBrc20AccountBalanceTable, CreateBrc20TokenTable, CreateInscriptionTable}
+const UpdatedInscriptionsTable string = `
+CREATE TABLE IF NOT EXISTS updated_inscriptions_models (
+	id INTEGER NOT NULL PRIMARY KEY,
+	inscription_id VARCHAR(255),
+	);
+`
+
+var Migrations = []string{CreateConfigTable, UpdatedInscriptionsTable, CreateAccountTable, CreateBrc20AccountBalanceTable, CreateBrc20TokenTable, CreateInscriptionTable}

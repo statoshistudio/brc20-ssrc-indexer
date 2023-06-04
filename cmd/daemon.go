@@ -226,6 +226,32 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 			}
 		}()
+		wg.Add(1)
+		go func() {
+			for {
+				time.Sleep(4 * time.Second)
+				logger.Info("Checking updated inscription...")
+				inscriptions, err := sql.GetUpdatedInscriptions(sql.SqlDB, 200)
+				if err != nil {
+					logger.Infof("Sql error %s", err.Error())
+					continue
+				}
+				for _, dbInscription := range inscriptions {
+					inscription_id := dbInscription.InscriptionId
+
+					inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
+					if err != nil {
+						continue
+					}
+					_, err = indexer.HandleCallback(sql.SqlDB, *inscription)
+					if err != nil {
+						continue
+					}
+
+				}
+
+			}
+		}()
 
 		wg.Add(1)
 		go func() {
