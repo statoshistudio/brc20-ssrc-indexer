@@ -270,7 +270,14 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	// index := r.URL.Query().Get("index")
 	// offset := r.URL.Query().Get("indoffsetex")
 	// apiKey := r.URL.Query().Get("apiKey")
+
 	message := make(map[string]string)
+	if len(inscription_id) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		message["message"] = "inscription_id is required"
+		json.NewEncoder(w).Encode(message)
+		return
+	}
 	inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
