@@ -44,8 +44,7 @@ type Configuration struct {
 	OrdinalApi               string         `mapstructure:"ordinal_api"`
 	DbDriver                 string         `mapstructure:"db_driver"`
 	DbDSN                    string         `mapstructure:"db_dsn"`
-	APIHttpPort              string         `mapstructure:"api_port"`
-	APIHost                  string         `mapstructure:"api_host"`
+	OrdinalApiServer         string         `mapstructure:"ordinal_api_server"`
 }
 
 var (
@@ -68,6 +67,7 @@ func Init() *viper.Viper {
 	}
 	v.SetDefault("log_level", "info")
 	v.SetDefault("channel_message_buffer_size", 128)
+	v.SetDefault("ordinal_api_server", "localhost:9125")
 	return v
 }
 func init() {

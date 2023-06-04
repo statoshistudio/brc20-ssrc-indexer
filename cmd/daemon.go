@@ -49,6 +49,7 @@ const (
 	RPC_PORT         Flag = "rpc-port"
 	RPC_HTTP_PORT    Flag = "rpc-http-port"
 	WS_ADDRESS       Flag = "ws-address"
+	API_PORT         Flag = "api-port"
 )
 const MaxDeliveryProofBlockSize = 1000
 
@@ -150,7 +151,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 		go http.Serve(listener, nil)
 		time.Sleep(3000)
-		logger.Infof("RPC server runing on: %+s", cfg.RPCHost+":"+rpcPort)
+		logger.Infof("RPC server listening on: %+s", cfg.RPCHost+":"+rpcPort)
 		sendHttp := rpcServer.NewHttpService(&ctx)
 		err = sendHttp.Start()
 		if err != nil {
@@ -163,7 +164,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	wg.Add(1)
 	go func() {
 		wss := ws.NewWsService(&ctx)
-		logger.Infof("wsAddress: %s\n", wsAddress)
+		logger.Infof("Websocket server listing on: %s\n", wsAddress)
 		http.HandleFunc("/echo", wss.ServeWebSocket)
 
 		log.Fatal(http.ListenAndServe(wsAddress, nil))
@@ -176,10 +177,9 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 	wg.Add(1)
 	go func() {
-		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
+		logger.Infof("Ordinal data source: %+s", cfg.OrdinalApi)
 		page := 0
 		_config, err := sql.GetConfig(sql.SqlDB, utils.LastIndexedPageKey)
-		// logger.Infof("Getting config %s:%s", _config.Key, _config.Value)
 		if err == nil {
 			page, err = strconv.Atoi(_config.Value)
 			logger.Infof("Starting from page %d", page)

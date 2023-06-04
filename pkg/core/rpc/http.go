@@ -60,32 +60,16 @@ func (p *HttpService) sendHttp(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// func (p *HttpService) serveJSONRPC(w http.ResponseWriter, req *http.Request) {
-// 	// if req.Method != "CONNECT" {
-// 	// 	http.Error(w, "method must be connect", 405)
-// 	// 	return
-// 	// }
-// 	conn, _, err := w.(http.Hijacker).Hijack()
-// 	if err != nil {
-// 		http.Error(w, "internal server error", 500)
-// 		return
-// 	}
-// 	defer conn.Close()
-// 	io.WriteString(conn, "HTTP/1.0 Connected\r\n\r\n")
-// 	jsonrpc.ServeConn(conn)
-// }
-
 func (p *HttpService) Start() error {
 
 	host := fmt.Sprintf("%s:%s", p.Cfg.RPCHost, p.Cfg.RPCPort)
-	utils.Logger.Infof("RPC server runing on: %s", host)
 	client, err := rpc.DialHTTP("tcp", host)
 
 	if err != nil {
 		utils.Logger.Errorf("Rpc Error:: %s", err.Error())
 		return err
 	}
-	utils.Logger.Info("Dial to rpc successful!")
+	utils.Logger.Info("RPC Http client dial to rpc successful!")
 	p.rpcClient = client
 	http.HandleFunc("/", p.sendHttp)
 	// http.HandleFunc("/rpcendpoint", p.serveJSONRPC)

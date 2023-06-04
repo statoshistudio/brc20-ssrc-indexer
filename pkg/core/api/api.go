@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -44,8 +43,12 @@ func HandleRequest() {
 	// http.HandleFunc("/accounts", getAccounts)
 	// http.HandleFunc("/tokens", getTokens)
 	// http.HandleFunc("/inscriptions", getInscriptions)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%s", cfg.APIHost, cfg.APIHttpPort), r))
+	utils.Logger.Infof("Ordinal API listening on %s", cfg.OrdinalApiServer)
+	err := http.ListenAndServe(cfg.OrdinalApiServer, r)
+	if err != nil {
+		// log.Fatal(err)
+		panic(err)
+	}
 
 }
 
