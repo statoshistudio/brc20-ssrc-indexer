@@ -67,7 +67,7 @@ func Init() *viper.Viper {
 	}
 	v.SetDefault("log_level", "info")
 	v.SetDefault("channel_message_buffer_size", 128)
-	v.SetDefault("ordinal_api_server", "localhost:9125")
+	v.SetDefault("ordinal_api_server", "127.0.0.1:9125")
 	return v
 }
 func init() {
