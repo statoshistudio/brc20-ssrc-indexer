@@ -74,6 +74,7 @@ type UpdatedInscriptionsModel struct {
 	gorm.Model
 	ID            int64  `gorm:"primaryKey;autoIncrement:true"`
 	InscriptionId string `gorm:"inscription_id"`
+	Satpoint      string `json:"satpoint"`
 }
 type ConfigModel struct {
 	gorm.Model

@@ -265,13 +265,16 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	message := make(map[string]string)
+	query := r.URL.Query()
+	txId := query.Get("txId")
+	index := r.URL.Query().Get("index")
+	offset := r.URL.Query().Get("offset")
 	inscription_id := r.URL.Query().Get("inscription_id")
-	// txId := r.URL.Query().Get("txId")
-	// index := r.URL.Query().Get("index")
-	// offset := r.URL.Query().Get("indoffsetex")
-	// apiKey := r.URL.Query().Get("apiKey")
+	values := r.URL.Query()
+	for k, v := range values {
+		fmt.Println(k, " => ", v)
+	}
 
-	// check if it is an existing one
 	if len(inscription_id) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		message["message"] = "inscription_id is required"
@@ -292,7 +295,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(message)
 		return
 	}
-	_, err = sql_mod.SaveUpdatedInscription(sql_mod.SqlDB, inscription_id)
+	_, err = sql_mod.SaveUpdatedInscription(sql_mod.SqlDB, inscription_id, fmt.Sprintf("%s:%s:%s", txId, index, offset))
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		message["message"] = err.Error()

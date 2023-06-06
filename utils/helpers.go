@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -18,6 +19,13 @@ func Contains(s []string, str string) bool {
 	}
 
 	return false
+}
+func ToSqlDateTime(t time.Time) string {
+	t = t.UTC()
+	formatted := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d",
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second())
+	return formatted
 }
 
 func IsValidChannel(ch ChatMessageHeader, signature string, channelOwner string) bool {

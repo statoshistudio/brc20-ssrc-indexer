@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/datatypes"
+	"github.com/ByteGum/go-ssrc/utils"
 
 	// _ "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	"gorm.io/gorm"
@@ -133,9 +133,9 @@ func GetUpdatedInscription(db *gorm.DB, inscriptionId string) (*UpdatedInscripti
 	return &data, nil
 }
 
-func SaveUpdatedInscription(db *gorm.DB, inscriptionId string) (int, error) {
+func SaveUpdatedInscription(db *gorm.DB, inscriptionId string, satpoint string) (int, error) {
 
-	data := UpdatedInscriptionsModel{InscriptionId: inscriptionId}
+	data := UpdatedInscriptionsModel{InscriptionId: inscriptionId, Satpoint: satpoint}
 	err := db.Create(&data).Error
 	if err != nil {
 		return -1, err
@@ -183,11 +183,22 @@ func GetUpdatedInscriptions(db *gorm.DB, perPage int) ([]UpdatedInscriptionsMode
 	}
 
 	data := []UpdatedInscriptionsModel{}
-	err := db.Limit(perPage).Where("createdAt > ?", datatypes.Date(time.Now().Add(4*time.Minute))).Error
+	err := db.Limit(perPage).Where("created_at < ?", utils.ToSqlDateTime(time.Now().Add(-4*time.Minute))).Find(&data).Error
 	if err != nil {
+
 		return nil, err
 	}
+
 	return data, nil
+}
+func DeleteUpdatedInscription(db *gorm.DB, id int64) error {
+
+	data := UpdatedInscriptionsModel{ID: id}
+	err := db.Delete(&data).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 func GetConfig(db *gorm.DB, key string) (*ConfigModel, error) {
 

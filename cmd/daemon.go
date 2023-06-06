@@ -197,35 +197,35 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		// rr, _ := json.Marshal(resp)
 		// logger.Infof("TEST RUN  : %+s ", string(rr))
 
-		wg.Add(1)
-		go func() {
-			for {
-				resp, err := indexer.GetDataFromServer(&ctx, &page)
-				if err != nil {
-					logger.Fatal("indexer error: ", err)
-					panic(err)
-				}
+		// wg.Add(1)
+		// go func() {
+		// 	for {
+		// 		resp, err := indexer.GetDataFromServer(&ctx, &page)
+		// 		if err != nil {
+		// 			logger.Fatal("indexer error: ", err)
+		// 			panic(err)
+		// 		}
 
-				logger.Infof("page index : %d", page)
+		// 		logger.Infof("page index : %d", page)
 
-				_list := resp.Data
+		// 		_list := resp.Data
 
-				for i := len(_list) - 1; i >= 0; i-- {
-					inscriptionIdCh <- _list[i]
-				}
-				_page := strconv.Itoa(page)
-				_, configError := sql.SetConfig(sql.SqlDB, utils.LastIndexedPageKey, _page)
-				if configError != nil {
-					logger.Errorf("Setting last indexed page sql error: %s", err)
-				}
-				if resp.Meta.Pagination.Next != nil {
-					page = int(*resp.Meta.Pagination.Next)
-				} else {
-					time.Sleep(20 * time.Second)
-				}
+		// 		for i := len(_list) - 1; i >= 0; i-- {
+		// 			inscriptionIdCh <- _list[i]
+		// 		}
+		// 		_page := strconv.Itoa(page)
+		// 		_, configError := sql.SetConfig(sql.SqlDB, utils.LastIndexedPageKey, _page)
+		// 		if configError != nil {
+		// 			logger.Errorf("Setting last indexed page sql error: %s", err)
+		// 		}
+		// 		if resp.Meta.Pagination.Next != nil {
+		// 			page = int(*resp.Meta.Pagination.Next)
+		// 		} else {
+		// 			time.Sleep(20 * time.Second)
+		// 		}
 
-			}
-		}()
+		// 	}
+		// }()
 		wg.Add(1)
 		go func() {
 			for {
@@ -236,11 +236,18 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 					logger.Infof("Sql error %s", err.Error())
 					continue
 				}
+				logger.Infof("Found %d updated inscriptions", len(inscriptions))
 				for _, dbInscription := range inscriptions {
 					inscription_id := dbInscription.InscriptionId
 
 					inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
 					if err != nil {
+						continue
+					}
+					if inscription.Satpoint == dbInscription.Satpoint {
+						if dbInscription.CreatedAt.Before(time.Now().Add(-24 * time.Hour)) {
+							sql.DeleteUpdatedInscription(sql.SqlDB, dbInscription.ID)
+						}
 						continue
 					}
 					_, err = indexer.HandleCallback(sql.SqlDB, *inscription)
