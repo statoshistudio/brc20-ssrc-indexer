@@ -23,7 +23,7 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	}
 	//dsn := "user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
 
 	if err != nil {
@@ -46,6 +46,7 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	return db, err
 }
 
+
 func init() {
 	cfg := utils.Config
 
@@ -54,4 +55,8 @@ func init() {
 		panic(SqlDBErr)
 	}
 
+}
+
+func logLeve() logger.LogLevel {
+	if cfg.
 }
