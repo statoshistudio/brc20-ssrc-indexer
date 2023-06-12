@@ -123,6 +123,16 @@ func GetUnitGenericInscription(db *gorm.DB, inscriptionId string) (*GenericInscr
 	return &data, nil
 }
 
+func GetUnitPendingTransferInscription(db *gorm.DB, inscriptionId string) (*PendingTransferInscriptionModel, error) {
+
+	data := PendingTransferInscriptionModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
 func GetUpdatedInscription(db *gorm.DB, inscriptionId string) (*UpdatedInscriptionsModel, error) {
 
 	data := UpdatedInscriptionsModel{}
@@ -183,6 +193,7 @@ func GetUpdatedInscriptions(db *gorm.DB, perPage int) ([]UpdatedInscriptionsMode
 	}
 
 	data := []UpdatedInscriptionsModel{}
+	utils.Logger.Infof("Time %s %s", utils.ToSqlDateTime(time.Now().Add(-4*time.Second)), time.Now().String())
 	err := db.Limit(perPage).Where("created_at < ?", utils.ToSqlDateTime(time.Now().Add(-4*time.Minute))).Find(&data).Error
 	if err != nil {
 
@@ -194,7 +205,7 @@ func GetUpdatedInscriptions(db *gorm.DB, perPage int) ([]UpdatedInscriptionsMode
 func DeleteUpdatedInscription(db *gorm.DB, id int64) error {
 
 	data := UpdatedInscriptionsModel{ID: id}
-	err := db.Delete(&data).Error
+	err := db.Unscoped().Delete(&data).Error
 	if err != nil {
 		return err
 	}

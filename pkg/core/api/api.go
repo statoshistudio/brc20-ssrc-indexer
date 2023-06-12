@@ -37,12 +37,8 @@ func HandleRequest() {
 	r.HandleFunc("/generic-inscriptions", getGenericInscriptions)
 	r.HandleFunc("/generic-inscriptions/{inscriptionId}", getUnitGenericInscription)
 	r.HandleFunc("/pending-transactions", getPendingTransactions)
-	r.HandleFunc("/callback", handleCallback)
-	// http.Handle("/", r)
-
-	// http.HandleFunc("/accounts", getAccounts)
-	// http.HandleFunc("/tokens", getTokens)
-	// http.HandleFunc("/inscriptions", getInscriptions)
+	r.HandleFunc("/notify", handleNotification)
+	r.HandleFunc("/callback", handleNotification)
 	utils.Logger.Infof("Ordinal API listening on %s", cfg.OrdinalApiServer)
 	err := http.ListenAndServe(cfg.OrdinalApiServer, r)
 	if err != nil {
@@ -261,51 +257,16 @@ func getPendingTransactions(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func handleCallback(w http.ResponseWriter, r *http.Request) {
+func handleNotification(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
-	message := make(map[string]string)
 	query := r.URL.Query()
-	txId := query.Get("txId")
-	index := r.URL.Query().Get("index")
-	offset := r.URL.Query().Get("offset")
-	inscription_id := r.URL.Query().Get("inscription_id")
-	values := r.URL.Query()
-	for k, v := range values {
-		fmt.Println(k, " => ", v)
+	switch topic := query.Get("topic"); topic {
+	case "new-inscription":
+	case "inscription-update":
+	default:
+		inscriptionUpdate(w, r)
 	}
-
-	if len(inscription_id) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		message["message"] = "inscription_id is required"
-		json.NewEncoder(w).Encode(message)
-		return
-	}
-
-	_, err := sql_mod.GetUnitGenericInscription(sql_mod.SqlDB, inscription_id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			w.WriteHeader(http.StatusOK)
-			message["message"] = "New inscription"
-			json.NewEncoder(w).Encode(message)
-			return
-		}
-		w.WriteHeader(http.StatusBadGateway)
-		message["message"] = err.Error()
-		json.NewEncoder(w).Encode(message)
-		return
-	}
-	_, err = sql_mod.SaveUpdatedInscription(sql_mod.SqlDB, inscription_id, fmt.Sprintf("%s:%s:%s", txId, index, offset))
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		message["message"] = err.Error()
-		json.NewEncoder(w).Encode(message)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	message["message"] = inscription_id
-	json.NewEncoder(w).Encode(message)
-	return
 
 	// inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, inscription_id)
 	// if err != nil {
@@ -351,4 +312,45 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	//json.NewEncoder(w).Encode(inscription)
 
+}
+
+func inscriptionUpdate(w http.ResponseWriter, r *http.Request) {
+	message := make(map[string]string)
+	query := r.URL.Query()
+	txId := query.Get("txId")
+	index := query.Get("index")
+	offset := query.Get("offset")
+	inscription_id := query.Get("inscription_id")
+
+	if len(inscription_id) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		message["message"] = "inscription_id is required"
+		json.NewEncoder(w).Encode(message)
+		return
+	}
+
+	_, err := sql_mod.GetUnitGenericInscription(sql_mod.SqlDB, inscription_id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			w.WriteHeader(http.StatusOK)
+			message["message"] = "New inscription"
+			json.NewEncoder(w).Encode(message)
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		message["message"] = err.Error()
+		json.NewEncoder(w).Encode(message)
+		return
+	}
+	_, err = sql_mod.SaveUpdatedInscription(sql_mod.SqlDB, inscription_id, fmt.Sprintf("%s:%s:%s", txId, index, offset))
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		message["message"] = err.Error()
+		json.NewEncoder(w).Encode(message)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	message["message"] = inscription_id
+	json.NewEncoder(w).Encode(message)
+	return
 }

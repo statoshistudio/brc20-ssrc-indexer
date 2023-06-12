@@ -11,6 +11,7 @@ import (
 
 var SqlDB *gorm.DB
 var SqlDBErr error
+var cfg utils.Configuration
 
 func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, error) {
 	// db, err := sql.Open("sqlite3", file)
@@ -23,7 +24,7 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	}
 	//dsn := "user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger: logger.Default.LogMode(logLevel()),
 	})
 
 	if err != nil {
@@ -46,7 +47,6 @@ func InitializeDb(driver string, dsn string, migrations []string) (*gorm.DB, err
 	return db, err
 }
 
-
 func init() {
 	cfg := utils.Config
 
@@ -54,9 +54,11 @@ func init() {
 	if SqlDBErr != nil {
 		panic(SqlDBErr)
 	}
-
 }
 
-func logLeve() logger.LogLevel {
-	if cfg.
+func logLevel() logger.LogLevel {
+	if cfg.LogLevel == "info" {
+		return logger.Info
+	}
+	return logger.Silent
 }
