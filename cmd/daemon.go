@@ -273,7 +273,7 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 							return err
 						}
 						if pending != nil {
-							err = indexer.ProcessPendingTransferInscription(tx, *pending)
+							err = indexer.ProcessPendingTransferInscription(tx, *pending, *inscription)
 							if err != nil && err != gorm.ErrRecordNotFound {
 								logger.Errorf("UpdateError: %s", err.Error())
 								return err

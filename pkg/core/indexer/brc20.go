@@ -531,7 +531,7 @@ func ProcessUpdatedGenericInscription(tx *gorm.DB, inscriptionResponse Inscripti
 	return &data, nil
 }
 
-func ProcessPendingTransferInscription(db *gorm.DB, pendingTransferInscription sql.PendingTransferInscriptionModel) error {
+func ProcessPendingTransferInscription(db *gorm.DB, pendingTransferInscription sql.PendingTransferInscriptionModel, inscriptionResponse InscriptionResponse) error {
 	utils.Logger.Infof("@@@@pendingTransferInscription err = %s  ", pendingTransferInscription.InscriptionId)
 	inscription, err := sql.GetUnitGenericInscription(db, pendingTransferInscription.InscriptionId)
 	// sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
@@ -544,17 +544,17 @@ func ProcessPendingTransferInscription(db *gorm.DB, pendingTransferInscription s
 		return nil
 	}
 
-	if pendingTransferInscription.GenesisAddress == inscription.Address {
-		utils.Logger.Infof("@@@ Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+	if pendingTransferInscription.GenesisAddress == inscriptionResponse.Address {
+		utils.Logger.Infof("@@@ Thesame pendingTransferInscription.Address == inscriptionResponse.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
 		return errors.New("Not an updated inscription")
 	}
-	utils.Logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+	utils.Logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscriptionResponse.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
 
 	currentOwner := ""
 	previousOwner := ""
 	txAddress := strings.Split(inscription.Satpoint, ":")[0]
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 100; i++ {
 		if currentOwner == pendingTransferInscription.GenesisAddress {
 			break
 		}
