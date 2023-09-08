@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,22 +19,22 @@ import (
 
 	// "net/rpc/jsonrpc"
 
-	server "github.com/ByteGum/go-ssrc/pkg/core/api"
+	ordApi "github.com/ByteGum/go-ssrc/pkg/core/api"
 	"github.com/ByteGum/go-ssrc/pkg/core/db"
 	indexer "github.com/ByteGum/go-ssrc/pkg/core/indexer"
-	p2p "github.com/ByteGum/go-ssrc/pkg/core/p2p"
-	processor "github.com/ByteGum/go-ssrc/pkg/core/processor"
 	rpcServer "github.com/ByteGum/go-ssrc/pkg/core/rpc"
 	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	ws "github.com/ByteGum/go-ssrc/pkg/core/ws"
 	utils "github.com/ByteGum/go-ssrc/utils"
 	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slices"
 	"gorm.io/gorm"
 )
 
-var logger = utils.Logger
+var logger = &utils.Logger
 
 const (
 	TESTNET string = "/icm/testing"
@@ -46,7 +47,9 @@ const (
 	NODE_PRIVATE_KEY Flag = "node-private-key"
 	NETWORK               = "network"
 	RPC_PORT         Flag = "rpc-port"
+	RPC_HTTP_PORT    Flag = "rpc-http-port"
 	WS_ADDRESS       Flag = "ws-address"
+	API_PORT         Flag = "api-port"
 )
 const MaxDeliveryProofBlockSize = 1000
 
@@ -73,6 +76,7 @@ func init() {
 	daemonCmd.Flags().StringP(string(NODE_PRIVATE_KEY), "k", "", "The node private key. This is the nodes identity")
 	daemonCmd.Flags().StringP(string(NETWORK), "m", MAINNET, "Network mode")
 	daemonCmd.Flags().StringP(string(RPC_PORT), "p", utils.DefaultRPCPort, "RPC server port")
+	daemonCmd.Flags().StringP(string(RPC_HTTP_PORT), "r", utils.DefaultRPCPort, "RPC http client port")
 	daemonCmd.Flags().StringP(string(WS_ADDRESS), "w", utils.DefaultWebSocketAddress, "http service address")
 }
 
@@ -86,9 +90,14 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	cfg := utils.Config
 	ctx := context.Background()
 
-	connectedSubscribers := map[string]map[string][]*websocket.Conn{}
-
 	rpcPort, err := cmd.Flags().GetString(string(RPC_PORT))
+	rpcHttpPort, err := cmd.Flags().GetString(string(RPC_HTTP_PORT))
+	rpcHttpPort = cfg.RPCHttpPort
+	if len(cfg.RPCPort) == 0 {
+		rpcHttpPort = utils.DefaultRPCHttpPort
+	}
+	cfg.RPCHttpPort = rpcHttpPort
+
 	wsAddress, err := cmd.Flags().GetString(string(WS_ADDRESS))
 	network, err := cmd.Flags().GetString(string(NETWORK))
 	if err != nil || len(network) == 0 {
@@ -100,9 +109,11 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		cfg.Network = network
 	}
 
-	if rpcPort == utils.DefaultRPCPort && len(cfg.RPCPort) > 0 {
-		rpcPort = cfg.RPCPort
+	rpcPort = cfg.RPCPort
+	if len(cfg.RPCPort) == 0 {
+		rpcPort = utils.DefaultRPCPort
 	}
+	cfg.RPCPort = rpcPort
 
 	ctx = context.WithValue(ctx, utils.ConfigKey, &cfg)
 	ctx = context.WithValue(ctx, utils.IncomingMessageChId, &utils.IncomingMessagesP2P2_D_c)
@@ -121,65 +132,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, utils.PublishedSubChId, &utils.PublishedSubC)
 
 	var wg sync.WaitGroup
-	errc := make(chan error)
+	// errc := make(chan error)
 
-	channelSubscriptionStore := db.New(&ctx, utils.ChannelSubscriptionStore)
 	newChannelSubscriptionStore := db.New(&ctx, utils.NewChannelSubscriptionStore)
 
-	unconfurmedBlockStore := db.New(&ctx, utils.UnconfirmedDeliveryProofStore)
-
 	ctx = context.WithValue(ctx, utils.NewChannelSubscriptionStore, newChannelSubscriptionStore)
-	// sqliteDB, sqliteDBErr := sqliteDB.InitializeDb(fmt.Sprintf("%s/indexer.db", cfg.DataDir), sqliteDB.Migrations)
-	// var mu sync.Mutex
+
 	defer wg.Wait()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-
-			case clientHandshake, ok := <-utils.ClientHandshakeC:
-				if !ok {
-					logger.Errorf("Verification channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go processor.ValidateMessageClient(ctx, &connectedSubscribers, clientHandshake, channelSubscriptionStore)
-
-			case batch, ok := <-utils.PubSubInputBlockC:
-				if !ok {
-					logger.Errorf("PubsubInputBlock channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go func() {
-					unconfurmedBlockStore.Put(ctx, db.Key(batch.Key()), batch.ToJSON())
-				}()
-			case proof, ok := <-utils.PubSubInputProofC:
-				if !ok {
-					logger.Errorf("PubsubInputBlock channel closed. Please restart server to try or adjust buffer size in config")
-					wg.Done()
-					return
-				}
-				go func() {
-					unconfurmedBlockStore.Put(ctx, db.Key(proof.BlockKey()), proof.ToJSON())
-				}()
-
-			}
-
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-
-		if err := recover(); err != nil {
-			wg.Done()
-			errc <- fmt.Errorf("P2P error: %g", err)
-		}
-		p2p.Run(&ctx)
-	}()
 
 	wg.Add(1)
 	go func() {
@@ -189,15 +148,23 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal("ListenTCP error: ", err)
 		}
-		logger.Infof("RPC server runing on: %+s", cfg.RPCHost+":"+rpcPort)
+
 		go http.Serve(listener, nil)
+		time.Sleep(3000)
+		logger.Infof("RPC server listening on: %+s", cfg.RPCHost+":"+rpcPort)
+		sendHttp := rpcServer.NewHttpService(&ctx)
+		err = sendHttp.Start()
+		if err != nil {
+			logger.Fatalf("Http error: %s", err.Error())
+		}
+		logger.Infof("New http connection")
 
 	}()
 
 	wg.Add(1)
 	go func() {
 		wss := ws.NewWsService(&ctx)
-		logger.Infof("wsAddress: %s\n", wsAddress)
+		logger.Infof("Websocket server listing on: %s\n", wsAddress)
 		http.HandleFunc("/echo", wss.ServeWebSocket)
 
 		log.Fatal(http.ListenAndServe(wsAddress, nil))
@@ -205,37 +172,42 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 	wg.Add(1)
 	go func() {
-		server.HandleRequest()
+		ordApi.HandleRequest()
 	}()
 
 	wg.Add(1)
 	go func() {
-		sendHttp := rpcServer.NewHttpService(&ctx)
-		err := sendHttp.Start()
-		if err != nil {
-			logger.Fatalf("Http error: ", err)
-		}
-		logger.Infof("New http connection")
-	}()
-
-	wg.Add(1)
-	go func() {
-		logger.Infof("HTTP CAll : %+s", cfg.OrdinalApi)
+		logger.Infof("Ordinal data source: %+s", cfg.OrdinalApi)
 		page := 0
+		_config, err := sql.GetConfig(sql.SqlDB, utils.LastIndexedPageKey)
+		if err == nil {
+			page, err = strconv.Atoi(_config.Value)
+			logger.Infof("Starting from page %d", page)
+			if err != nil {
+				page = 0
+			}
+		} else {
+			logger.Infof("sql.GetConfig Errr %s", err)
+		}
 
-		inscriptionIdCh := make(chan string)
-		pendingTransferInscriptionCh := make(chan sql.PendingTransferInscriptionModel)
-
-		// resp, err := indexer.GetUnitDataByIdFromServer(&ctx, "e9ec244139fdd654e25085d88db97f740463bbc3757169a7a24c4bb62f10c8aci0")
-		// rr, _ := json.Marshal(resp)
-		// logger.Infof("TEST RUN  : %+s ", string(rr))
+		// inscriptionIdCh := make(chan string)
+		// pendingTransferInscriptionCh := make(chan sql.PendingTransferInscriptionModel)
 
 		wg.Add(1)
 		go func() {
 			for {
-				resp, err := indexer.GetDataFromServer(&ctx, &page)
-				if err != nil {
-					logger.Fatal("indexer error: ", err)
+				var resp *indexer.InscriptionResponses
+				for {
+					resp, err = indexer.GetDataFromServer(&ctx, &page)
+					if err != nil {
+						logger.Error(err)
+						if strings.Contains(err.Error(), "connection refused") {
+							time.Sleep(10 * time.Second)
+							continue
+						}
+						break
+					}
+					break
 				}
 
 				logger.Infof("page index : %d", page)
@@ -243,7 +215,13 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 				_list := resp.Data
 
 				for i := len(_list) - 1; i >= 0; i-- {
-					inscriptionIdCh <- _list[i]
+					// inscriptionIdCh <- _list[i]
+					indexBrc20(ctx, _list[i])
+				}
+				_page := strconv.Itoa(page)
+				_, configError := sql.SetConfig(sql.SqlDB, utils.LastIndexedPageKey, _page)
+				if configError != nil {
+					logger.Errorf("Setting last indexed page sql error: %s", err)
 				}
 				if resp.Meta.Pagination.Next != nil {
 					page = int(*resp.Meta.Pagination.Next)
@@ -253,173 +231,207 @@ func daemonFunc(cmd *cobra.Command, args []string) {
 
 			}
 		}()
-
 		wg.Add(1)
 		go func() {
 			for {
-				_list, err := sql.GetPendingInscriptions(sql.SqlDB)
-				utils.Logger.Infof("@@@@GetPendingInscriptions err = %s  ", len(_list))
+				time.Sleep(4 * time.Second)
+				logger.Info("Checking updated inscription...")
+				inscriptions, err := sql.GetUpdatedInscriptions(sql.SqlDB, 200)
 				if err != nil {
-					logger.Fatal("GetPendingInscriptions error: ", err)
+					logger.Infof("Sql error %s", err.Error())
+					continue
 				}
-				for i := 0; i < len(_list); i++ {
-
-					pendingTransferInscriptionCh <- _list[i]
-				}
-
-				time.Sleep(20 * time.Second)
-
-			}
-		}()
-
-		wg.Add(1)
-		go func() {
-			for {
-				select {
-
-				case id := <-inscriptionIdCh:
-					// utils.Logger.Infof("+_+_+___+_++_ Number:  %d  ", id)
-					func() {
-
-						inscription, err := indexer.GetUnitDataByIdFromServer(&ctx, id)
+				logger.Infof("Found %d updated inscriptions", len(inscriptions))
+				for _, updatedInscription := range inscriptions {
+					inscription_id := updatedInscription.InscriptionId
+					var inscription *indexer.InscriptionResponse
+					for {
+						inscription, err = indexer.GetUnitDataByIdFromServer(inscription_id)
 						if err != nil {
-							fmt.Println("--------")
-							fmt.Println(err)
-							return
-						}
-						if err := indexer.SaveGenericInscription(sql.SqlDB, inscription); err != nil {
-							// return any error will rollback
-							if err != nil {
-								logger.Infof("Errr %s", err)
+							logger.Error(err)
+							if strings.Contains(err.Error(), "connection refused") {
+								time.Sleep(5 * time.Second)
+								continue
 							}
-							return
+							break
 						}
-						acceptedTypes := [2]string{
-							"text/plain;charset=utf-8",
-							"application/json"}
-
-						if acceptedTypes[0] != inscription.Inscription.ContentType && acceptedTypes[1] != inscription.Inscription.ContentType {
-							return
+						break
+					}
+					if inscription.Satpoint == updatedInscription.Satpoint {
+						logger.Infof("Inscription %s satpoint not updated", inscription_id)
+						if updatedInscription.CreatedAt.Before(time.Now().Add(-7 * 24 * time.Hour)) {
+							sql.DeleteUpdatedInscription(sql.SqlDB, updatedInscription.ID)
 						}
-						if sql.SqlDBErr != nil {
-							logger.Infof("Errr %s", sql.SqlDBErr)
+						continue
+					}
+					updateError := sql.SqlDB.Transaction(func(tx *gorm.DB) error {
+
+						// Process pending transfers
+						pending, err := sql.GetUnitPendingTransferInscription(tx, inscription.InscriptionId)
+						if err != nil && err != gorm.ErrRecordNotFound {
+							logger.Errorf("Unit pending transfer inscription: %s", err.Error())
+							return err
 						}
-
-						var staticInscriptionStructure indexer.StaticInscriptionStructure
-
-						err = json.Unmarshal(inscription.Inscription.Body, &staticInscriptionStructure)
-						if err != nil {
-							logger.Infof("Errr %s", err)
-						}
-
-						if staticInscriptionStructure.P == "brc-20" {
-							content := inscription.Inscription.GetContent()
-							sql.SqlDB.Transaction(func(tx *gorm.DB) error {
-
-								if err := indexer.SaveUnitInscription(tx, inscription); err != nil {
-									// return any error will rollback
-									return err
-								}
-
-								if content.Op == "deploy" {
-									if err := indexer.SaveNewToken(tx, &content, inscription.GenesisAddress); err != nil {
-										// return any error will rollback
-										return err
-									}
-								}
-								if content.Op == "mint" {
-									if err := indexer.PerformMintOperation(tx, &content, *inscription); err != nil {
-										// return any error will rollback
-										return err
-									}
-								}
-
-								if content.Op == "transfer" {
-									// genesisTransaction, err := indexer.GetUnitTransactionByIdFromServer(&ctx, inscription.GenesisAddress)
-									// if err != nil {
-									// 	logger.Infof("Transfer Errr : %s - %s", inscription.GenesisAddress, err)
-									// 	return err
-									// }
-									if err := indexer.PerformTransferOperation(tx, &content, *inscription, inscription.GenesisAddress); err != nil {
-										// return any error will rollback
-										return err
-									}
-								}
-
-								// return nil will commit the whole transaction
-								return nil
-							})
-
-						}
-						sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
-					}()
-				case pendingTransferInscription := <-pendingTransferInscriptionCh:
-					func() {
-						utils.Logger.Infof("@@@@pendingTransferInscription err = %s  ", pendingTransferInscription.InscriptionId)
-						inscription, err := sql.GetUnitGenericInscription(sql.SqlDB, pendingTransferInscription.InscriptionId)
-						// sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
-						if err != nil {
-							fmt.Println("--------")
-							fmt.Println(err)
-							return
-						}
-
-						if pendingTransferInscription.GenesisAddress == inscription.Address {
-							logger.Infof("@@@ Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
-							return
-						}
-						logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscription.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
-						if sql.SqlDBErr != nil {
-							logger.Infof("Errr %s", sql.SqlDBErr)
-						}
-						currentOwner := ""
-						previousOwner := ""
-						txAddress := strings.Split(inscription.Satpoint, ":")[0]
-
-						for i := 0; i < 1000; i++ {
-							if currentOwner == pendingTransferInscription.GenesisAddress {
-								break
+						if pending != nil {
+							err = indexer.ProcessPendingTransferInscription(tx, *pending, *inscription)
+							if err != nil && err != gorm.ErrRecordNotFound {
+								logger.Errorf("UpdateError: %s", err.Error())
+								return err
 							}
-							nextTransaction, err := indexer.GetUnitTransactionByIdFromServer(&ctx, txAddress)
-							if err != nil {
-								logger.Infof("genesisTransaction Errr %s", err)
-							}
-							previousOwner = currentOwner
-							currentOwner = nextTransaction.Data.Transaction.Output[0].Address
-							txAddress = strings.Split(nextTransaction.Data.Transaction.Input[0].PreviousOutput, ":")[0]
-
 						}
+						_, err = indexer.ProcessUpdatedGenericInscription(tx, *inscription)
 
-						// content := inscription.Inscription.GetContent()
-						var content indexer.InscriptionStructure
-						err = json.Unmarshal([]byte(inscription.InscriptionBody), &content)
 						if err != nil {
-							log.Println("Errr err:", err)
-							return
+							logger.Errorf("Index error: %s", err.Error())
+							return err
 						}
-						if err := indexer.CreditPendingOperation(sql.SqlDB, &content, *inscription, previousOwner); err != nil {
-							// return any error will rollback
-							logger.Infof("@@@ @@@@@@NOT Thesame AFTER Errrr %s", err)
-							return
+						err = sql.DeleteUpdatedInscription(tx, updatedInscription.ID)
+						if err != nil {
+							return err
 						}
+						return nil
+					})
+					if updateError != nil {
 
-						logger.Infof("@@@ @@@@@@NOT Thesame AFTER pendingTransferInscription.Address == inscription.Address %s == %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address, previousOwner)
-
-						//Perform Overations
-
-						//Perform Overations
-
-						//Perform Overations
-
-						// sql.SqlDB.Delete(&pendingTransferInscription)
-
-					}()
+						continue
+					}
 
 				}
 
 			}
 		}()
+
+		// wg.Add(1)
+		// go func() {
+		// 	for {
+		// 		_list, err := sql.GetPendingInscriptions(sql.SqlDB)
+		// 		utils.Logger.Infof("@@@@GetPendingInscriptions err = %d  ", len(_list))
+		// 		if err != nil {
+		// 			logger.Fatal("GetPendingInscriptions error: ", err)
+		// 		}
+		// 		for i := 0; i < len(_list); i++ {
+
+		// 			pendingTransferInscriptionCh <- _list[i]
+		// 		}
+
+		// 		time.Sleep(20 * time.Second)
+
+		// 	}
+		// }()
+
+		// wg.Add(1)
+		// go func() {
+		// 	for {
+		// 		select {
+
+		// 		case id := <-inscriptionIdCh:
+		// 		utils.Logger.Infof("+_+_+___+_++_ Number:  %d  ", id)
+
+		// 		case pendingTransferInscription := <-pendingTransferInscriptionCh:
+		// 			indexer.ProcessPendingTransferInscription(ctx, pendingTransferInscription)
+		// 		}
+
+		// 	}
+		// }()
 
 	}()
 
+}
+
+func indexBrc20(ctx context.Context, id string) {
+	var inscription *indexer.InscriptionResponse
+	var err error
+	for {
+		inscription, err = indexer.GetUnitDataByIdFromServer(id)
+		if err != nil {
+			if strings.Contains(err.Error(), "connection refused") {
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			break
+		}
+		break
+	}
+	if err != nil {
+		fmt.Println("--------")
+		logger.Error(err)
+		panic(err)
+	}
+	if inscription == nil {
+		return
+	}
+	if err := indexer.SaveGenericInscription(sql.SqlDB, inscription); err != nil {
+		// return any error will rollback
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			logger.Debugf("Errr %s", err.Error())
+			return
+		}
+		panic(err)
+
+	}
+	if sql.SqlDBErr != nil {
+		logger.Error(sql.SqlDBErr)
+		panic(sql.SqlDBErr)
+	}
+	acceptedTypes := []string{
+		"text/plain;charset=utf-8",
+		"application/json"}
+
+	if slices.Index(acceptedTypes, inscription.Inscription.ContentType) == -1 {
+		return
+	}
+
+	var staticInscriptionStructure indexer.StaticInscriptionStructure
+
+	err = json.Unmarshal(inscription.Inscription.Body, &staticInscriptionStructure)
+	if err != nil {
+		logger.WithFields(logrus.Fields{"id": inscription.InscriptionId}).Infof("Body not a json: %s", err.Error())
+		return
+	}
+
+	if staticInscriptionStructure.P == "brc-20" {
+		content := inscription.Inscription.GetContent()
+		sqlError := sql.SqlDB.Transaction(func(tx *gorm.DB) error {
+
+			if err := indexer.SaveUnitInscription(tx, inscription); err != nil {
+				// return any error will rollback
+				return err
+			}
+
+			if content.Op == "deploy" {
+				if err := indexer.SaveNewToken(tx, &content, inscription.GenesisAddress); err != nil {
+					// return any error will rollback
+					return err
+				}
+			}
+			if content.Op == "mint" {
+				if err := indexer.PerformMintOperation(tx, &content, *inscription); err != nil {
+					// return any error will rollback
+					return err
+				}
+			}
+
+			if content.Op == "transfer" {
+				// genesisTransaction, err := indexer.GetUnitTransactionByIdFromServer(&ctx, inscription.GenesisAddress)
+				// if err != nil {
+				// 	logger.Infof("Transfer Errr : %s - %s", inscription.GenesisAddress, err)
+				// 	return err
+				// }
+				if err := indexer.PerformTransferOperation(tx, &content, *inscription, inscription.GenesisAddress); err != nil {
+					// return any error will rollback
+					return err
+				}
+			}
+
+			// return nil will commit the whole transaction
+			return nil
+		})
+		if sqlError != nil {
+			panic(sqlError)
+		}
+	}
+	_, sqlError := sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
+	if sqlError != nil {
+		panic(sqlError)
+	}
 }

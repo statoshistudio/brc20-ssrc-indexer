@@ -4,16 +4,19 @@ import (
 	// "errors"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	// "github.com/ByteGum/go-ssrc/pkg/core/sql"
 	"github.com/ByteGum/go-ssrc/pkg/core/sql"
 	utils "github.com/ByteGum/go-ssrc/utils"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -164,7 +167,7 @@ func GetDataFromServer(mainCtx *context.Context, page *int) (*InscriptionRespons
 	// utils.Logger.Infof("GetDataFromServer page  : %d,  %d", *page, *index)
 
 	cfg, _ := (*mainCtx).Value(utils.ConfigKey).(*utils.Configuration)
-	utils.Logger.Infof("GetDataFromServer page neV : %d,  %s", *page, fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
+	utils.Logger.Infof("GetDataFromServer page #: %d,  %s", *page, fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
 	resp, err1 := http.Get(fmt.Sprintf("%s%s%d", cfg.OrdinalApi, "/api/inscriptions/", *page))
 	if err1 != nil {
 		return nil, err1
@@ -186,9 +189,9 @@ func GetDataFromServer(mainCtx *context.Context, page *int) (*InscriptionRespons
 	return &inscriptionResponses, nil
 }
 
-func GetUnitDataByIdFromServer(mainCtx *context.Context, id string) (*InscriptionResponse, error) {
+func GetUnitDataByIdFromServer(id string) (*InscriptionResponse, error) {
 	// utils.Logger.Infof("+++++++ GetUnitDataByIdFromServer id : %+s", id)
-	cfg, _ := (*mainCtx).Value(utils.ConfigKey).(*utils.Configuration)
+	cfg := utils.Config
 	resp, err1 := http.Get(fmt.Sprintf("%s%s%s", cfg.OrdinalApi, "/api/inscription/", id))
 	if err1 != nil {
 		return nil, err1
@@ -199,17 +202,21 @@ func GetUnitDataByIdFromServer(mainCtx *context.Context, id string) (*Inscriptio
 	}
 
 	var inscriptionResponse InscriptionResponse
+	// println(fmt.Printf("INSCRIPITONRESP %s", body))
 	err3 := json.Unmarshal(body, &inscriptionResponse)
 	if err3 != nil {
+		// if strings.Contains(string(body), "not found") {
+		// 	return nil, nil
+		// }
 		return nil, err3
 	}
 	// utils.Logger.Infof("<><><><><><>GetUnitDataByIdFromServer Number:  %d, = %s : %+s ", *inscriptionResponse.Number, id, string(inscriptionResponse.Inscription.ContentType))
 	return &inscriptionResponse, nil
 }
 
-func GetUnitTransactionByIdFromServer(mainCtx *context.Context, id string) (*Transaction, error) {
+func GetUnitTransactionByIdFromServer(id string) (*Transaction, error) {
 	// utils.Logger.Infof("+++++++ GetUnitDataByIdFromServer id : %+s", id)
-	cfg, _ := (*mainCtx).Value(utils.ConfigKey).(*utils.Configuration)
+	cfg := utils.Config
 	resp, err1 := http.Get(fmt.Sprintf("%s%s%s", cfg.OrdinalApi, "/api/tx/", id))
 	if err1 != nil {
 		return nil, err1
@@ -257,23 +264,36 @@ func SaveGenericInscription(db *gorm.DB, inscriptionResponse *InscriptionRespons
 		InscriptionId:            inscriptionResponse.InscriptionId,
 		Address:                  inscriptionResponse.Address,
 		GenesisAddress:           inscriptionResponse.GenesisAddress,
-		GenesisFee:               int64(*inscriptionResponse.GenesisFee),
-		GenesisHeight:            int64(*inscriptionResponse.GenesisHeight),
+		GenesisFee:               *inscriptionResponse.GenesisFee,
+		GenesisHeight:            *inscriptionResponse.GenesisHeight,
 		InscriptionBody:          inscriptionResponse.Inscription.Body,
-		InscriptionContentLength: int64(*inscriptionResponse.Inscription.ContentLength),
+		InscriptionContentLength: *inscriptionResponse.Inscription.ContentLength,
 		InscriptionContentType:   inscriptionResponse.Inscription.ContentType,
 		Next:                     next,
 		Previous:                 inscriptionResponse.Previous,
-		Number:                   int64(*inscriptionResponse.Number),
+		Number:                   *inscriptionResponse.Number,
 		ScriptPubkey:             inscriptionResponse.InscriptionOutput.ScriptPubkey,
-		Value:                    int64(inscriptionResponse.InscriptionOutput.Value),
+		Value:                    inscriptionResponse.InscriptionOutput.Value,
 		OutputAddress:            inscriptionResponse.InscriptionOutput.Address,
 		Sat:                      inscriptionResponse.Sat,
 		Satpoint:                 inscriptionResponse.Satpoint,
 		Timestamp:                inscriptionResponse.Timestamp,
 	}
-	utils.Logger.Infof("@@@@SaveGenericInscription Type = %s  ", string(inscriptionResponse.Inscription.ContentType))
-	return db.Create(&data).Error
+	utils.Logger.WithFields(logrus.Fields{"id": inscriptionResponse.InscriptionId}).Infof("@@@@SaveGenericInscription  id %s", inscriptionResponse.InscriptionId)
+	create := sql.SqlDB.Transaction(func(tx *gorm.DB) error {
+		update := tx.Model(&data).Where("inscription_id = ?", inscriptionResponse.InscriptionId).Updates(&data)
+		if update.Error != nil {
+			utils.Logger.Infof("Update Error %s", update.Error.Error())
+			return update.Error
+		}
+
+		if update.RowsAffected == 0 {
+			return tx.Create(&data).Error
+		}
+		return nil
+	})
+
+	return create
 }
 
 func SaveNewToken(db *gorm.DB, inscriptionStructure *InscriptionStructure, address string) error {
@@ -458,7 +478,7 @@ func CreditPendingOperation(db *gorm.DB, inscriptionStructure *InscriptionStruct
 
 		// InscriptionId:  inscription.InscriptionId,
 		// 	GenesisAddress: inscription.GenesisAddress,
-		err = tx.Delete(&sql.PendingTransferInscriptionModel{}, " inscription_id=? and genesis_address=? ", inscription.InscriptionId, inscription.GenesisAddress).Error
+		err = tx.Unscoped().Delete(&sql.PendingTransferInscriptionModel{}, " inscription_id=? and genesis_address=? ", inscription.InscriptionId, inscription.GenesisAddress).Error
 		if err != nil {
 			// return any error will rollback
 			utils.Logger.Infof("@@@@pendingTransferInscriptionModel err = %s  ", err)
@@ -472,11 +492,13 @@ func CreditPendingOperation(db *gorm.DB, inscriptionStructure *InscriptionStruct
 	return err
 }
 
-func HandleCallback(db *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.GenericInscriptionModel, error) {
+func ProcessUpdatedGenericInscription(tx *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.GenericInscriptionModel, error) {
 
 	data := sql.GenericInscriptionModel{}
-	err := db.First(&data, "inscription_id = ?", inscriptionResponse.InscriptionId).Error
+
+	err := tx.First(&data, "inscription_id = ?", inscriptionResponse.InscriptionId).Error
 	if err != nil {
+		utils.Logger.Infof("Inscription id %s %s", inscriptionResponse.InscriptionId, err.Error())
 		return nil, err
 	}
 
@@ -484,7 +506,7 @@ func HandleCallback(db *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.
 	if inscriptionResponse.Next != nil {
 		next = *inscriptionResponse.Next
 	}
-	err = db.Model(&data).Updates(sql.GenericInscriptionModel{
+	tx = tx.Model(&data).Updates(sql.GenericInscriptionModel{
 		Address:                  inscriptionResponse.Address,
 		GenesisAddress:           inscriptionResponse.GenesisAddress,
 		GenesisFee:               int64(*inscriptionResponse.GenesisFee),
@@ -501,7 +523,73 @@ func HandleCallback(db *gorm.DB, inscriptionResponse InscriptionResponse) (*sql.
 		Sat:                      inscriptionResponse.Sat,
 		Satpoint:                 inscriptionResponse.Satpoint,
 		Timestamp:                inscriptionResponse.Timestamp,
-	}).Error
+	})
+	if tx.Error != nil {
+		return nil, err
+	}
 
 	return &data, nil
+}
+
+func ProcessPendingTransferInscription(db *gorm.DB, pendingTransferInscription sql.PendingTransferInscriptionModel, inscriptionResponse InscriptionResponse) error {
+	utils.Logger.Infof("@@@@pendingTransferInscription err = %s  ", pendingTransferInscription.InscriptionId)
+	inscription, err := sql.GetUnitGenericInscription(db, pendingTransferInscription.InscriptionId)
+	// sql.SaveNewAccount(sql.SqlDB, inscription.GenesisAddress)
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			fmt.Println("--------")
+			fmt.Println(err)
+			return err
+		}
+		return nil
+	}
+
+	if pendingTransferInscription.GenesisAddress == inscriptionResponse.Address {
+		utils.Logger.Infof("@@@ Thesame pendingTransferInscription.Address == inscriptionResponse.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+		return errors.New("Not an updated inscription")
+	}
+	utils.Logger.Infof("@@@ @@@@@@NOT Thesame pendingTransferInscription.Address == inscriptionResponse.Address %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address)
+
+	currentOwner := ""
+	previousOwner := ""
+	txAddress := strings.Split(inscription.Satpoint, ":")[0]
+
+	for i := 0; i < 100; i++ {
+		if currentOwner == pendingTransferInscription.GenesisAddress {
+			break
+		}
+		nextTransaction, err := GetUnitTransactionByIdFromServer(txAddress)
+		if err != nil {
+			utils.Logger.Infof("genesisTransaction Errr %s", err)
+			return err
+		}
+		previousOwner = currentOwner
+		currentOwner = nextTransaction.Data.Transaction.Output[0].Address
+		txAddress = strings.Split(nextTransaction.Data.Transaction.Input[0].PreviousOutput, ":")[0]
+
+	}
+
+	// content := inscription.Inscription.GetContent()
+	var content InscriptionStructure
+	err = json.Unmarshal([]byte(inscription.InscriptionBody), &content)
+	if err != nil {
+		log.Println("Unmershaling error:", err)
+		return err
+	}
+	if err := CreditPendingOperation(db, &content, *inscription, previousOwner); err != nil {
+		// return any error will rollback
+		utils.Logger.Infof("@@@ @@@@@@NOT Thesame AFTER Errrr %s", err)
+		return err
+	}
+
+	utils.Logger.Infof("@@@ @@@@@@NOT Thesame AFTER pendingTransferInscription.Address == inscription.Address %s == %s == %s", pendingTransferInscription.GenesisAddress, inscription.Address, previousOwner)
+	return nil
+	//Perform Overations
+
+	//Perform Overations
+
+	//Perform Overations
+
+	// sql.SqlDB.Delete(&pendingTransferInscription)
+
 }

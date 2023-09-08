@@ -42,6 +42,9 @@ type Configuration struct {
 	BootstrapNode            bool           `mapstructure:"bootstrap_node"`
 	DataDir                  string         `mapstructure:"data_dir"`
 	OrdinalApi               string         `mapstructure:"ordinal_api"`
+	DbDriver                 string         `mapstructure:"db_driver"`
+	DbDSN                    string         `mapstructure:"db_dsn"`
+	OrdinalApiServer         string         `mapstructure:"ordinal_api_server"`
 }
 
 var (
@@ -52,11 +55,11 @@ func Init() *viper.Viper {
 	v := viper.New()
 	v.AutomaticEnv()
 	v.SetEnvPrefix("icm")
-	v.SetConfigName("config")     // name of config file (without extension)
-	v.SetConfigType("toml")       // REQUIRED if the config file does not have the extension in the name
-	v.AddConfigPath("/etc/icm/")  // path to look for the config file in
-	v.AddConfigPath("$HOME/.icm") // call multiple times to add many search paths
-	v.AddConfigPath(".")          // optionally look for config in the working directory
+	v.SetConfigName("config")      // name of config file (without extension)
+	v.SetConfigType("toml")        // REQUIRED if the config file does not have the extension in the name
+	v.AddConfigPath("/etc/ssrc/")  // path to look for the config file in
+	v.AddConfigPath("$HOME/.ssrc") // call multiple times to add many search paths
+	v.AddConfigPath(".")           // optionally look for config in the working directory
 
 	err := v.ReadInConfig() // Find and read the config file
 	if err != nil {         // Handle errors reading the config file
@@ -64,6 +67,7 @@ func Init() *viper.Viper {
 	}
 	v.SetDefault("log_level", "info")
 	v.SetDefault("channel_message_buffer_size", 128)
+	v.SetDefault("ordinal_api_server", "127.0.0.1:9125")
 	return v
 }
 func init() {

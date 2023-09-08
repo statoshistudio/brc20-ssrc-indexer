@@ -2,6 +2,9 @@ package sql
 
 import (
 	"fmt"
+	"time"
+
+	"github.com/ByteGum/go-ssrc/utils"
 
 	// _ "github.com/ByteGum/go-ssrc/pkg/core/indexer"
 	"gorm.io/gorm"
@@ -120,10 +123,43 @@ func GetUnitGenericInscription(db *gorm.DB, inscriptionId string) (*GenericInscr
 	return &data, nil
 }
 
+func GetUnitPendingTransferInscription(db *gorm.DB, inscriptionId string) (*PendingTransferInscriptionModel, error) {
+
+	data := PendingTransferInscriptionModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func GetUpdatedInscription(db *gorm.DB, inscriptionId string) (*UpdatedInscriptionsModel, error) {
+
+	data := UpdatedInscriptionsModel{}
+	err := db.First(&data, "inscription_id = ?", inscriptionId).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func SaveUpdatedInscription(db *gorm.DB, inscriptionId string, satpoint string) (int, error) {
+
+	data := UpdatedInscriptionsModel{InscriptionId: inscriptionId, Satpoint: satpoint}
+	err := db.Create(&data).Error
+	if err != nil {
+		return -1, err
+	}
+	return int(data.ID), nil
+}
+
 func SaveNewAccount(db *gorm.DB, address string) (int, error) {
 
 	data := AccountModel{Address: address}
-	db.Create(&data)
+	err := db.Create(&data).Error
+	if err != nil {
+		return -1, err
+	}
 	return int(data.ID), nil
 }
 
@@ -149,4 +185,48 @@ func GetAllPendingTransactions(db *gorm.DB, current int, perPage int) ([]Pending
 	}
 
 	return data, nil
+}
+func GetUpdatedInscriptions(db *gorm.DB, perPage int) ([]UpdatedInscriptionsModel, error) {
+
+	if perPage == 0 {
+		perPage = 200
+	}
+
+	data := []UpdatedInscriptionsModel{}
+	utils.Logger.Infof("Time %s %s", utils.ToSqlDateTime(time.Now().Add(-4*time.Second)), time.Now().String())
+	err := db.Limit(perPage).Where("created_at < ?", utils.ToSqlDateTime(time.Now().Add(-4*time.Minute))).Find(&data).Error
+	if err != nil {
+
+		return nil, err
+	}
+
+	return data, nil
+}
+func DeleteUpdatedInscription(db *gorm.DB, id int64) error {
+
+	data := UpdatedInscriptionsModel{ID: id}
+	err := db.Unscoped().Delete(&data).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func GetConfig(db *gorm.DB, key string) (*ConfigModel, error) {
+
+	data := ConfigModel{}
+	err := db.Where(&ConfigModel{Key: key}).First(&data).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func SetConfig(db *gorm.DB, key string, value string) (*ConfigModel, error) {
+
+	data := ConfigModel{}
+	err := db.Where(ConfigModel{Key: key}).Assign(ConfigModel{Value: value}).FirstOrCreate(&data).Error
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
