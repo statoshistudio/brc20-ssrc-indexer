@@ -1,3 +1,3 @@
 # go-ssrc
 
-Go ICM node
+A realtime bitcoin ordinal inscription indexer for brc20 and ssrc20 protocol.
